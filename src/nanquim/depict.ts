@@ -13,6 +13,7 @@ import {
   centroid,
   cross,
   dot,
+  fromAngle,
   len,
   lerp,
   lineIntersectionT,
@@ -31,7 +32,7 @@ import { ringInfo } from './rings.ts';
 import { parseSmiles } from './smiles.ts';
 import { assignWedges } from './stereo.ts';
 import { type DrawStyle, type StyleName, resolveStyle } from './style.ts';
-import { roundedHull } from './outline.ts';
+import { roundedEllipse, roundedHull } from './outline.ts';
 import { type AbbreviationName, ALL_ABBREVIATIONS, abbreviate, addHydrogens, markSources, subset } from './transform.ts';
 
 export interface Highlight {
@@ -624,7 +625,14 @@ function draw(
     if (a.source !== undefined && !drawnOf.has(a.source)) drawnOf.set(a.source, a.index);
     for (const m of a.members ?? []) drawnOf.set(m, a.index);
   }
-  const toDrawn = (list: number[] = []) => [...new Set(list.map((i) => drawnOf.get(i)).filter((i): i is number => i !== undefined))];
+  // Hydrogens written out for drawing (O=C–H, N–H) belong to the group of their atom.
+  const toDrawn = (list: number[] = []) => {
+    const set = new Set(list.map((i) => drawnOf.get(i)).filter((i): i is number => i !== undefined));
+    for (const i of [...set]) {
+      for (const n of mol.neighbors(i)) if (mol.atoms[n].element === 'H' && mol.atoms[n].source === undefined) set.add(n);
+    }
+    return [...set];
+  };
 
   // ---- highlights (drawn underneath)
   const underlay: Primitive[] = [];
@@ -686,7 +694,8 @@ function draw(
       for (const box of labels[i]?.boxes ?? []) pts.push(vec(box.x1, box.y1), vec(box.x2, box.y2), vec(box.x1, box.y2), vec(box.x2, box.y1));
     }
     const pad = 0.3 * L;
-    let hullPts = pts;
+    let withLabel: Vec[] | undefined;
+    const ownNames = taken.length;
     if (ann.label) {
       const w = advance(ann.label) * fs * BOLD_WIDTH;
       const h = FONT_METRICS.capHeight * fs;
@@ -720,13 +729,20 @@ function draw(
       const cy = (r.y1 + r.y2) / 2;
       texts.push({ text: ann.label, x: cx, y: cy + h / 2, size: fs, weight: 700, anchor: 'middle' });
       taken.push(r);
-      // Enclose the name too, unless that would swallow atoms of other groups.
-      const withLabel = [...pts, vec(r.x1, r.y1), vec(r.x2, r.y1), vec(r.x1, r.y2), vec(r.x2, r.y2)];
-      const hull = roundedHull(withLabel, pad);
-      const swallows = P.some((p, i) => !group.includes(i) && inside(p, hull));
-      if (!swallows) hullPts = withLabel;
+      withLabel = [...pts, vec(r.x1, r.y1), vec(r.x2, r.y1), vec(r.x1, r.y2), vec(r.x2, r.y2)];
     }
-    const points = roundedHull(hullPts, pad);
+    // An ellipse around the group and its name, as drawn in the booklets; tighter shapes
+    // only when the ellipse would swallow atoms or names of other groups.
+    const others = [
+      ...P.filter((_, i) => !group.includes(i)).flatMap((p) => [p, ...[0, 1, 2, 3, 4, 5].map((k) => add(p, fromAngle((k * Math.PI) / 3, 0.18 * L)))]),
+      ...taken.slice(0, ownNames).map((t) => vec((t.x1 + t.x2) / 2, (t.y1 + t.y2) / 2)),
+    ];
+    const candidates = [
+      ...(withLabel ? [roundedEllipse(withLabel, pad), roundedHull(withLabel, pad)] : []),
+      roundedEllipse(pts, pad),
+      roundedHull(pts, pad),
+    ];
+    const points = candidates.find((c) => !others.some((p) => inside(p, c))) ?? candidates[candidates.length - 1];
     outlines.push({
       points,
       width: lw * 0.85,

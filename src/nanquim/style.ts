@@ -67,6 +67,9 @@ const ENEM: DrawStyle = {
   fontFamily: "Arial, 'Liberation Sans', Arimo, 'Helvetica Neue', Helvetica, sans-serif",
   subscriptScale: 0.7,
   padding: 0.3,
+  // 2024 Q112: fine grey dashes, about 4 px on and 3 px off at 200 dpi.
+  annotationColor: '#808080',
+  annotationDash: [0.09, 0.07],
 };
 
 export const STYLES = {

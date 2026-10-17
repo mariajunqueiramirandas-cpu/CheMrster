@@ -149,6 +149,13 @@ describe('annotations and captions', () => {
     });
   });
 
+  it('keeps the written-out aldehyde H inside the outline of its group', () => {
+    const d = depict('CCCCCC=O', { ...enem, annotations: [{ atoms: [5, 6] }] });
+    const h = d.atoms.find((a) => a.element === 'H')!;
+    expect(inside(h, d.outlines[0].points)).toBe(true);
+    expect(inside(site(d, 3), d.outlines[0].points)).toBe(false);
+  });
+
   it('sets a bold caption and a source line under the structure', () => {
     const plain = depict('O=Cc1ccccc1', enem);
     const d = depict('O=Cc1ccccc1', { ...enem, caption: 'Benzaldeído', source: '(no óleo de amêndoas)' });

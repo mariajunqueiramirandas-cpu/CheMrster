@@ -6,7 +6,7 @@ structure is drawn the way it would look printed in a textbook or on the exam it
 ```
 npm install
 npm run dev        # app at http://localhost:5173
-npm test           # 151 tests: parser, perception, layout, stereo, drawing, ENEM parity, analysis, lessons
+npm test           # 152 tests: parser, perception, layout, stereo, drawing, ENEM parity, analysis, lessons
 npm run build      # typecheck + production bundle
 npm run sheet      # render every gallery molecule to PNG contact sheets in ./out
 ```
