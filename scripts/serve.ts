@@ -4,8 +4,9 @@
  *
  *   npm run build && ANTHROPIC_API_KEY=sk-ant-... npm run serve -- [port]
  *
- * Anyone who can open the page can use the key through the proxy, so put it behind your
- * own login before exposing it to the internet.
+ * It listens on 127.0.0.1 and answers only to localhost names. To serve others, set
+ * HOST=0.0.0.0 and ALLOWED_HOSTS=your.domain; anyone who can open the page can then use
+ * the key through the proxy, so put it behind your own login first.
  */
 import { createReadStream, existsSync, statSync } from 'node:fs';
 import { createServer } from 'node:http';
@@ -29,7 +30,9 @@ if (!existsSync(join(root, 'index.html'))) {
   process.exit(1);
 }
 
-const proxy = anthropicProxy(process.env.ANTHROPIC_API_KEY);
+const bind = process.env.HOST ?? '127.0.0.1';
+const allowed = ['localhost', '127.0.0.1', '[::1]', ...(process.env.ALLOWED_HOSTS ?? '').split(',').map((h) => h.trim().toLowerCase())].filter(Boolean);
+const proxy = anthropicProxy(process.env.ANTHROPIC_API_KEY, allowed);
 
 createServer((req, res) =>
   proxy(req, res, () => {
@@ -44,9 +47,15 @@ createServer((req, res) =>
     if (!file.startsWith(root) || !existsSync(file) || statSync(file).isDirectory()) file = join(root, 'index.html');
     res.setHeader('content-type', TYPES[extname(file)] ?? 'application/octet-stream');
     if (file.includes(`${join(root, 'assets')}`)) res.setHeader('cache-control', 'public, max-age=31536000, immutable');
-    createReadStream(file).pipe(res);
+    // A file that vanished (a rebuild in progress) or cannot be read is a 404, not a crash.
+    createReadStream(file)
+      .on('error', () => {
+        if (!res.headersSent) res.statusCode = 404;
+        res.end();
+      })
+      .pipe(res);
   }),
-).listen(port, () => {
+).listen(port, bind, () => {
   const tutor = process.env.ANTHROPIC_API_KEY ? 'tutor com IA ligado' : 'sem ANTHROPIC_API_KEY: o tutor usa a própria chave do aluno ou o modo offline';
-  console.log(`CheMrster em http://localhost:${port} (${tutor})`);
+  console.log(`CheMrster em http://${bind === '0.0.0.0' ? 'localhost' : bind}:${port} (${tutor})`);
 });

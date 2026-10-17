@@ -138,7 +138,8 @@ function withXp(p: Progress, xp: number, now: Date): Progress {
       ? p.streak
       : (() => {
           const count = currentStreak(p, now) + 1;
-          return { count, last: today, best: Math.max(p.streak.best ?? 0, count) };
+          // Records saved before `best` existed: the last streak is the best known.
+          return { count, last: today, best: Math.max(p.streak.best ?? p.streak.count, count) };
         })();
   return { ...p, xp: p.xp + xp, streak, days: { ...p.days, [today]: { ...day, xp: day.xp + xp } } };
 }

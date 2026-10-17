@@ -5,7 +5,7 @@
  */
 import { type CSSProperties, type KeyboardEvent, type PointerEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { LESSON_BY_ID, LESSONS } from '../../course/course.ts';
-import { type BoardCard, type CardColor, COLUMNS, COLUMN_TITLE, type ColumnId, columnOf, moveCard, removeCard, updateCard } from '../../study/board.ts';
+import { type BoardCard, type CardColor, COLUMNS, COLUMN_TITLE, type ColumnId, addCard, columnOf, moveCard, removeCard, updateCard } from '../../study/board.ts';
 import { LEVEL_LABEL, daysUntil, masteryAll } from '../../study/progress.ts';
 import { createCard, editBoard, seedBoard, syncOnVisit, useBoard } from '../board-store.ts';
 import { CheckIcon, CloseIcon, PlusIcon, TrashIcon, TutorIcon } from '../components/Icons.tsx';
@@ -56,6 +56,7 @@ export function BoardScreen() {
   const [drag, setDrag] = useState<Drag | null>(null);
   const [announce, setAnnounce] = useState('');
   const scroller = useRef<HTMLDivElement>(null);
+  const root = useRef<HTMLDivElement>(null);
   const total = Object.keys(board.cards).length;
 
   useEffect(() => {
@@ -169,21 +170,30 @@ export function BoardScreen() {
     if (touch) press.current.timer = window.setTimeout(() => begin(press.current?.x ?? 0, press.current?.y ?? 0), 260);
   };
 
-  // While dragging with a finger the page must not scroll; Escape puts the card back.
+  // A non-passive touch listener present from the first touch keeps touch moves cancellable,
+  // so once a long press has lifted a card the finger drags it instead of scrolling the board.
+  useEffect(() => {
+    const el = root.current;
+    if (!el) return;
+    const hold = (e: TouchEvent) => {
+      if (dragRef.current) e.preventDefault();
+    };
+    el.addEventListener('touchmove', hold, { passive: false });
+    return () => el.removeEventListener('touchmove', hold);
+  }, []);
+
+  // Escape puts a dragged card back.
   useEffect(() => {
     if (!drag) return;
-    const stop = (e: TouchEvent) => e.preventDefault();
     const esc = (e: globalThis.KeyboardEvent) => e.key === 'Escape' && finish(null, true);
-    window.addEventListener('touchmove', stop, { passive: false });
     window.addEventListener('keydown', esc);
-    return () => {
-      window.removeEventListener('touchmove', stop);
-      window.removeEventListener('keydown', esc);
-    };
+    return () => window.removeEventListener('keydown', esc);
   }, [!!drag]);
 
   // ---- keyboard ----
   const onCardKey = (e: KeyboardEvent<HTMLElement>, id: string) => {
+    // Keys on the card's own link (Praticar) belong to the link.
+    if (e.target !== e.currentTarget) return;
     const col = columnOf(board, id);
     if (!col) return;
     const index = board.columns[col].indexOf(id);
@@ -220,7 +230,7 @@ export function BoardScreen() {
   const dragged = drag ? board.cards[drag.id] : undefined;
 
   return (
-    <div className={`board${drag ? ' board--dragging' : ''}`}>
+    <div ref={root} className={`board${drag ? ' board--dragging' : ''}`}>
       <header className="board-head">
         <div>
           <h1>Quadro de estudos</h1>
@@ -536,10 +546,12 @@ function CardEditor({ card, onClose }: { card: BoardCard; onClose: () => void })
           type="button"
           className="btn btn--quiet btn--danger"
           onClick={() => {
-            const snapshot = board;
+            const index = board.columns[col].indexOf(card.id);
+            // Close first: once the card is gone this editor unmounts before the dialog's close event.
+            onClose();
             editBoard((b) => removeCard(b, card.id));
-            ref.current?.close();
-            toast('Cartão apagado', { label: 'Desfazer', run: () => editBoard(() => snapshot) });
+            // Undo puts back this card where it was, leaving later changes alone.
+            toast('Cartão apagado', { label: 'Desfazer', run: () => editBoard((b) => (b.cards[card.id] ? b : addCard(b, col, card, index))) });
           }}
         >
           <TrashIcon width={18} height={18} /> Apagar

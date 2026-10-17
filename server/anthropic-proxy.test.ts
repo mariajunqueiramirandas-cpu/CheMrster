@@ -1,12 +1,12 @@
-import { createServer } from 'node:http';
+import { createServer, request } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { anthropicProxy } from './anthropic-proxy.ts';
+import { anthropicProxy, hostName } from './anthropic-proxy.ts';
 
 const realFetch = globalThis.fetch;
 
-async function serve(apiKey: string | undefined) {
-  const proxy = anthropicProxy(apiKey);
+async function serve(apiKey: string | undefined, allowedHosts?: string[]) {
+  const proxy = anthropicProxy(apiKey, allowedHosts);
   const server = createServer((req, res) => proxy(req, res, () => ((res.statusCode = 404), res.end('next'))));
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
   const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -16,6 +16,20 @@ async function serve(apiKey: string | undefined) {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('anthropic proxy', () => {
+  it('only answers to allowed host names when given a list', async () => {
+    const s = await serve('sk-secret', ['localhost', '127.0.0.1']);
+    expect((await realFetch(`${s.base}/api/anthropic/status`)).status).toBe(200);
+    // A rebinding page still sends its own name as the Host.
+    const r = await new Promise<number>((resolve) => {
+      const url = new URL(`${s.base}/api/anthropic/status`);
+      request({ host: url.hostname, port: url.port, path: url.pathname, headers: { host: 'evil.example:80' } }, (res) => resolve(res.statusCode ?? 0)).end();
+    });
+    expect(r).toBe(403);
+    expect(hostName('[::1]:4173')).toBe('[::1]');
+    expect(hostName('localhost:5173')).toBe('localhost');
+    await s.close();
+  });
+
   it('reports whether a key is configured', async () => {
     for (const key of ['sk-test', undefined]) {
       const s = await serve(key);

@@ -404,7 +404,7 @@ export function CanvasScreen() {
       } else if (e.key === 'Escape') {
         setSelected([]);
         setSelectedEdge(null);
-      } else if (e.key === 'Enter' && selected.length === 1) {
+      } else if (e.key === 'Enter' && selected.length === 1 && !(e.target as HTMLElement).closest?.('button, a, [role="button"]')) {
         e.preventDefault();
         setEditing(selected[0]);
       } else if (e.key.startsWith('Arrow') && selected.length) {
@@ -425,8 +425,9 @@ export function CanvasScreen() {
   }, [selected, selectedEdge, nodes, duplicate, removeSelection, fit, addNode]);
 
   const onDoubleClick = (e: ReactMouseEvent<HTMLDivElement>) => {
-    const t = e.target as HTMLElement;
-    if (t.closest('.node-editor')) return;
+    // Pointer capture sends clicks to the surface itself; find what is really under the pointer.
+    const t = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
+    if (!t || t.closest('.node-editor')) return;
     const nodeEl = t.closest<HTMLElement>('[data-node]');
     if (nodeEl) {
       setEditing(nodeEl.dataset.node!);

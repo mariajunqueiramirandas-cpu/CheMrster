@@ -32,6 +32,8 @@ export interface UserTurn {
   screen?: ScreenContext;
   /** Short line above the bubble, e.g. "Sobre a questão de Adição". */
   about?: string;
+  /** The API declined it; it stays on screen but is not sent again. */
+  refused?: boolean;
 }
 
 export interface TutorTurn {

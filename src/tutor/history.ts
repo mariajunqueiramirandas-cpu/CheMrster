@@ -36,6 +36,7 @@ export function partsText(parts: Part[]): string {
 export function toApiMessages(turns: Turn[]): ApiMessage[] {
   const out: ApiMessage[] = [];
   for (const turn of turns) {
+    if (turn.role === 'user' && turn.refused) continue;
     if (turn.role === 'user') {
       const content: Anthropic.Beta.BetaTextBlockParam[] = [];
       if (turn.context) content.push({ type: 'text', text: turn.context });

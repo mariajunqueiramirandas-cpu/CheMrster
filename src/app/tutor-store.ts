@@ -15,9 +15,10 @@ import { analyze, describeExercise, makeExercise, react } from '../tutor/tools.t
 import type { Part, Thread, TutorTurn, UserTurn } from '../tutor/types.ts';
 import { addTasks, removeCards, seedBoard } from './board-store.ts';
 import { addCluster, removeFromMap } from './canvas-store.ts';
-import { memory, persisted, uid, usePersisted } from './persist.ts';
+import { memory, onWriteFailure, persisted, uid, usePersisted } from './persist.ts';
 import { settingsStore } from './settings.ts';
 import { MAX_STEP_MS, progressStore, recordAttempt } from './store.ts';
+import { toast } from './toast.ts';
 
 interface TutorData {
   threads: Record<string, Thread>;
@@ -26,6 +27,19 @@ interface TutorData {
 }
 
 const MAX_THREADS = 40;
+/** Conversations, most recent first, that keep their exact API record; older ones replay as plain text. */
+const MAX_REPLAYABLE = 8;
+
+/** Older conversations shed their API record (thinking, tool inputs and results), the bulk of their size. */
+function slim(data: TutorData, keep: number, keepThreads = MAX_THREADS): TutorData {
+  const order = data.order.slice(0, keepThreads);
+  const threads: Record<string, Thread> = {};
+  order.forEach((id, i) => {
+    const t = data.threads[id];
+    threads[id] = i < keep ? t : { ...t, turns: t.turns.map((turn) => (turn.role === 'assistant' && turn.api ? { ...turn, api: undefined } : turn)) };
+  });
+  return { threads, order };
+}
 
 export const tutorStore = persisted<TutorData>('chemrster:tutor:v1', (stored) => {
   const d = stored as Partial<TutorData> | undefined;
@@ -109,11 +123,29 @@ async function clientFor(c: Exclude<Connection, { kind: 'offline' }>): Promise<A
 function saveThread(thread: Thread) {
   tutorStore.set((d) => {
     const order = [thread.id, ...d.order.filter((id) => id !== thread.id)];
-    const threads = { ...d.threads, [thread.id]: thread };
-    for (const old of order.slice(MAX_THREADS)) delete threads[old];
-    return { threads, order: order.slice(0, MAX_THREADS) };
+    return slim({ threads: { ...d.threads, [thread.id]: thread }, order }, MAX_REPLAYABLE);
   });
 }
+
+// When the browser's storage is full, tutor history goes first so progress, board and map keep saving.
+let warned = false;
+let trimming = false;
+onWriteFailure(() => {
+  const d = tutorStore.get();
+  // Trimming writes the tutor store too; a failure while trimming must not trim again.
+  if (trimming || d.order.length <= 1) return false;
+  trimming = true;
+  try {
+    tutorStore.set(slim(d, 1, Math.floor(d.order.length / 2)));
+  } finally {
+    trimming = false;
+  }
+  if (!warned) {
+    warned = true;
+    toast('O armazenamento do navegador encheu: as conversas mais antigas com o tutor foram apagadas.');
+  }
+  return true;
+});
 
 function patchThread(id: string, fn: (t: Thread) => Thread) {
   const t = tutorStore.get().threads[id];
@@ -176,10 +208,11 @@ export function retry(threadId: string) {
   void respond(threadId);
 }
 
-function commit(threadId: string, turn: TutorTurn) {
+function commit(threadId: string, turn: TutorTurn, api?: TutorTurn['api']) {
   setLive(threadId, null);
   controllers.delete(threadId);
-  patchThread(threadId, (t) => ({ ...t, updatedAt: Date.now(), turns: [...t.turns, turn] }));
+  const done = api?.length ? { ...turn, api } : turn;
+  patchThread(threadId, (t) => ({ ...t, updatedAt: Date.now(), turns: [...t.turns, done] }));
 }
 
 // ---------------------------------------------------------------------------
@@ -253,9 +286,44 @@ async function respond(threadId: string) {
   const connection = connectionOf(s.apiKey, server.get() ?? (await checkServer()));
   const turn: TutorTurn = { role: 'assistant', id: uid('a'), at: Date.now(), parts: [], status: 'streaming', mode: connection.kind === 'offline' ? 'offline' : 'ai' };
   setLive(threadId, turn);
+  const parts: Part[] = [];
+  let frame = 0;
+  // Whatever happens below, the reply ends: done, stopped or with an error on screen.
+  try {
+    if (connection.kind === 'offline') await answerOffline(user, parts);
+    else {
+      const stop = await answerWithAi(threadId, thread, user, connection, s.model, turn, parts, (f) => (frame = f));
+      if (stop === 'refused') markRefused(threadId, user.id);
+    }
+    if (frame) cancelAnimationFrame(frame);
+    commit(threadId, { ...turn, parts, status: 'done' }, apiOf.get(turn.id));
+  } catch (err) {
+    if (frame) cancelAnimationFrame(frame);
+    if (controllers.get(threadId)?.signal.aborted) {
+      commit(threadId, { ...turn, parts, status: 'stopped' });
+      return;
+    }
+    const { describeError } = await import('../tutor/engine.ts').catch(() => ({ describeError: fallbackError }));
+    const { text, action } = describeError(err);
+    parts.push({ type: 'notice', tone: 'error', text, action });
+    commit(threadId, { ...turn, parts, status: 'error' });
+  } finally {
+    apiOf.delete(turn.id);
+  }
+}
 
-  if (connection.kind === 'offline') {
-    const parts = offlineReply(
+/** When even the engine cannot load (offline after an update), say so plainly. */
+const fallbackError = (err: unknown) => ({
+  text: `Não foi possível carregar o tutor: ${err instanceof Error ? err.message : String(err)}`,
+  action: 'retry' as const,
+});
+
+/** The API messages of a finished AI turn, by turn id, until it is committed. */
+const apiOf = new Map<string, TutorTurn['api']>();
+
+async function answerOffline(user: UserTurn, parts: Part[]) {
+  parts.push(
+    ...offlineReply(
       { text: user.text, screen: user.screen, progress: progressStore.get() },
       {
         exercise: exercisePart,
@@ -264,16 +332,24 @@ async function respond(threadId: string) {
           return ids.length ? { type: 'saved', id: uid('s'), target: 'board', ids, summary: `${plural(ids.length, 'lição', 'lições')} no quadro` } : undefined;
         },
       },
-    );
-    // A beat, so the answer reads as a reply rather than a page swap.
-    await new Promise((r) => setTimeout(r, 350));
-    commit(threadId, { ...turn, parts, status: 'done' });
-    return;
-  }
+    ),
+  );
+  // A beat, so the answer reads as a reply rather than a page swap.
+  await new Promise((r) => setTimeout(r, 350));
+}
 
+async function answerWithAi(
+  threadId: string,
+  thread: Thread,
+  user: UserTurn,
+  connection: Exclude<Connection, { kind: 'offline' }>,
+  model: string,
+  turn: TutorTurn,
+  parts: Part[],
+  onFrame: (frame: number) => void,
+): Promise<'ok' | 'refused'> {
   const controller = new AbortController();
   controllers.set(threadId, controller);
-  const parts: Part[] = [];
   let mark = { length: 0, text: '' };
   let frame = 0;
   const flush = () => {
@@ -281,60 +357,53 @@ async function respond(threadId: string) {
     if (live.get()[threadId]) setLive(threadId, { ...turn, parts: parts.map((p) => ({ ...p })) });
   };
   const schedule = () => {
-    if (!frame) frame = requestAnimationFrame(flush);
+    if (!frame) onFrame((frame = requestAnimationFrame(flush)));
   };
   const anchor = user.screen?.kind === 'map-card' ? user.screen.nodeId : undefined;
-  const { runTurn, describeError } = await import('../tutor/engine.ts');
-
-  try {
-    const result = await runTurn({
-      client: await clientFor(connection),
-      model: s.model,
-      messages: toApiMessages(thread.turns),
-      runTool: toolRunner(anchor),
-      signal: controller.signal,
-      callbacks: {
-        onStepStart() {
-          const last = parts.at(-1);
-          mark = { length: parts.length, text: last?.type === 'text' ? last.text : '' };
-        },
-        onText(delta) {
-          const last = parts.at(-1);
-          if (last?.type === 'text') last.text += delta;
-          else parts.push({ type: 'text', text: delta });
-          schedule();
-        },
-        onToolStart(id, name) {
-          parts.push({ type: 'tool', id, name, status: 'running' });
-          schedule();
-        },
-        onToolEnd(id, _name, outcome) {
-          const chip = parts.find((p) => p.type === 'tool' && p.id === id);
-          if (chip?.type === 'tool') Object.assign(chip, { status: outcome.isError ? 'error' : 'done', detail: outcome.detail });
-          if (outcome.part) parts.push(outcome.part);
-          schedule();
-        },
-        onDiscardStep() {
-          parts.length = mark.length;
-          const last = parts.at(-1);
-          if (last?.type === 'text') last.text = mark.text;
-          schedule();
-        },
+  const { runTurn } = await import('../tutor/engine.ts');
+  const result = await runTurn({
+    client: await clientFor(connection),
+    model,
+    messages: toApiMessages(thread.turns),
+    runTool: toolRunner(anchor),
+    signal: controller.signal,
+    callbacks: {
+      onStepStart() {
+        const last = parts.at(-1);
+        mark = { length: parts.length, text: last?.type === 'text' ? last.text : '' };
       },
-    });
-    if (result.stop !== 'end') parts.push({ type: 'notice', tone: 'info', text: STOP_NOTICE[result.stop] });
-    cancelAnimationFrame(frame);
-    commit(threadId, { ...turn, parts, api: result.api, status: 'done' });
-  } catch (err) {
-    cancelAnimationFrame(frame);
-    if (controller.signal.aborted) {
-      commit(threadId, { ...turn, parts, status: 'stopped' });
-      return;
-    }
-    const { text, action } = describeError(err);
-    parts.push({ type: 'notice', tone: 'error', text, action });
-    commit(threadId, { ...turn, parts, status: 'error' });
-  }
+      onText(delta) {
+        const last = parts.at(-1);
+        if (last?.type === 'text') last.text += delta;
+        else parts.push({ type: 'text', text: delta });
+        schedule();
+      },
+      onToolStart(id, name) {
+        parts.push({ type: 'tool', id, name, status: 'running' });
+        schedule();
+      },
+      onToolEnd(id, _name, outcome) {
+        const chip = parts.find((p) => p.type === 'tool' && p.id === id);
+        if (chip?.type === 'tool') Object.assign(chip, { status: outcome.isError ? 'error' : 'done', detail: outcome.detail });
+        if (outcome.part) parts.push(outcome.part);
+        schedule();
+      },
+      onDiscardStep() {
+        parts.length = mark.length;
+        const last = parts.at(-1);
+        if (last?.type === 'text') last.text = mark.text;
+        schedule();
+      },
+    },
+  });
+  if (result.stop !== 'end') parts.push({ type: 'notice', tone: 'info', text: STOP_NOTICE[result.stop] });
+  apiOf.set(turn.id, result.api);
+  // Declined before anything was kept: the message would be declined again on every later request.
+  return result.stop === 'refusal' && !result.api.length ? 'refused' : 'ok';
+}
+
+function markRefused(threadId: string, userTurnId: string) {
+  patchThread(threadId, (t) => ({ ...t, turns: t.turns.map((turn) => (turn.id === userTurnId && turn.role === 'user' ? { ...turn, refused: true } : turn)) }));
 }
 
 // ---------------------------------------------------------------------------

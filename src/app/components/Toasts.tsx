@@ -2,7 +2,7 @@ import { dismissToast, useToasts } from '../toast.ts';
 
 export function Toasts() {
   const toasts = useToasts();
-  if (!toasts.length) return null;
+  // The live region stays in the page, empty, so screen readers announce what is added to it.
   return (
     <div className="toasts" role="status" aria-live="polite">
       {toasts.map((t) => (

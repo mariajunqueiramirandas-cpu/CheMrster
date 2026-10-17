@@ -31,10 +31,16 @@ export const DAILY_GOALS = [
 
 const DEFAULTS: Settings = { apiKey: '', model: 'claude-opus-5-5', examDate: '', dailyGoal: 20, name: '', theme: 'system' };
 
-export const settingsStore = persisted<Settings>('chemrster:settings:v1', (stored) => {
+function revive(stored: unknown): Settings {
   const s = { ...DEFAULTS, ...(stored && typeof stored === 'object' ? (stored as Partial<Settings>) : {}) };
   if (!TUTOR_MODELS.some((m) => m.id === s.model)) s.model = DEFAULTS.model;
   return s;
+}
+
+// The API key never goes into a backup, and restoring one keeps this device's key.
+export const settingsStore = persisted<Settings>('chemrster:settings:v1', revive, {
+  backup: ({ apiKey: _key, ...rest }) => rest,
+  merge: (backup, current) => ({ ...revive(backup), apiKey: current.apiKey }),
 });
 
 export const useSettings = () => usePersisted(settingsStore);

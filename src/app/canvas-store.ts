@@ -23,11 +23,16 @@ import { memory, persisted, uid, usePersisted } from './persist.ts';
 import { href } from './router.ts';
 import { toast } from './toast.ts';
 
-export const canvasStore = persisted<Canvas>('chemrster:canvas:v1', (stored) => {
-  const c = stored as Partial<Canvas> | undefined;
-  if (!c || typeof c !== 'object' || !Array.isArray(c.maps) || !c.maps.length) return emptyCanvas(uid('m'));
-  return { maps: c.maps, current: c.maps.some((m) => m.id === c.current) ? c.current! : c.maps[0].id, nodes: c.nodes ?? {}, edges: c.edges ?? {} };
-});
+export const canvasStore = persisted<Canvas>(
+  'chemrster:canvas:v1',
+  (stored) => {
+    const c = stored as Partial<Canvas> | undefined;
+    if (!c || typeof c !== 'object' || !Array.isArray(c.maps) || !c.maps.length) return emptyCanvas(uid('m'));
+    return { maps: c.maps, current: c.maps.some((m) => m.id === c.current) ? c.current! : c.maps[0].id, nodes: c.nodes ?? {}, edges: c.edges ?? {} };
+  },
+  // A restored backup or another tab's edit is the new starting point: nothing before it to undo.
+  { onReplace: () => clearHistory() },
+);
 
 export const useCanvas = () => usePersisted(canvasStore);
 
@@ -37,6 +42,11 @@ const future: Canvas[] = [];
 const history = memory({ undo: 0, redo: 0 });
 export const useCanvasHistory = history.use;
 const syncHistory = () => history.set({ undo: past.length, redo: future.length });
+function clearHistory() {
+  past.length = 0;
+  future.length = 0;
+  syncHistory();
+}
 
 /** An undoable edit. */
 export function editCanvas(fn: (c: Canvas) => Canvas) {

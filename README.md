@@ -195,7 +195,9 @@ Shift, move, duplicate, recolour; drag a selected card's dot onto another card t
 Links are drawn like reaction arrows with the label written over them, as reagents are. Several
 maps, undo/redo, a minimap, and *Expandir* to let the tutor grow a card into a cluster.
 
-Everything a learner makes lives in `localStorage`; *Ajustes* exports and restores it as JSON.
+Everything a learner makes lives in `localStorage`; *Ajustes* exports and restores it as JSON
+(the API key is never included). If storage fills up, the oldest tutor conversations are
+dropped first so progress, board and map keep saving.
 
 ## Known limits
 
@@ -209,5 +211,6 @@ Everything a learner makes lives in `localStorage`; *Ajustes* exports and restor
 - Full triglycerides with three long chains still lay out with one tail hanging down; the
   lessons draw them with R groups, as textbooks do.
 - Data stays on one device; there is no account or sync beyond the JSON backup.
-- `npm run serve` lets anyone who can open the page use the server's API key: put it behind
-  your own login before exposing it to the internet.
+- `npm run serve` listens on 127.0.0.1 and answers only to localhost names. Serving others
+  (`HOST=0.0.0.0 ALLOWED_HOSTS=your.domain`) lets anyone who can open the page use the
+  server's API key: put it behind your own login first.

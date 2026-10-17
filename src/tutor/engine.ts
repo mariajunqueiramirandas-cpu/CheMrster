@@ -131,12 +131,13 @@ export function describeError(err: unknown): { text: string; action?: 'settings'
   if (err instanceof Anthropic.AuthenticationError || err instanceof Anthropic.PermissionDeniedError) {
     return { text: 'A chave da API não foi aceita. Confira a chave em Ajustes.', action: 'settings' };
   }
+  // The app's own proxy answers 503 when it has no key; checked before the generic 5xx case.
+  if (err instanceof Anthropic.APIError && (err.error as { error?: { type?: string } } | undefined)?.error?.type === 'proxy_not_configured') {
+    return { text: 'O servidor do app não tem uma chave da API configurada. Use a sua chave em Ajustes.', action: 'settings' };
+  }
   if (err instanceof Anthropic.RateLimitError) return { text: 'Muitas perguntas em pouco tempo. Espere um minuto e tente de novo.', action: 'retry' };
   if (err instanceof Anthropic.APIConnectionError) return { text: 'Sem conexão com o tutor. Verifique a internet e tente de novo.', action: 'retry' };
   if (err instanceof Anthropic.InternalServerError) return { text: 'O tutor está sobrecarregado agora. Tente de novo em instantes.', action: 'retry' };
-  if (err instanceof Anthropic.APIError && err.status === 503) {
-    return { text: 'O servidor do app não tem uma chave da API configurada. Use a sua chave em Ajustes.', action: 'settings' };
-  }
   if (err instanceof Anthropic.BadRequestError) return { text: `A API recusou o pedido: ${err.message}`, action: 'retry' };
   if (err instanceof Anthropic.APIError) return { text: `Erro da API (${err.status ?? 'sem código'}): ${err.message}`, action: 'retry' };
   return { text: `Algo deu errado: ${err instanceof Error ? err.message : String(err)}`, action: 'retry' };

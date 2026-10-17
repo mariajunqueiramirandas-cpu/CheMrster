@@ -2,8 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { columnOf, emptyBoard } from '../study/board.ts';
 import { edgesOf, emptyCanvas, intersects, nodesOf } from '../study/canvas.ts';
 import { addTasks, boardStore, createCard, syncAfterPractice } from './board-store.ts';
-import { addCluster, canvasStore, redoCanvas, saveToMap, undoCanvas } from './canvas-store.ts';
+import { addCluster, canvasStore, editCanvas, redoCanvas, saveToMap, undoCanvas } from './canvas-store.ts';
 import { exportAll, importAll } from './persist.ts';
+import { settingsStore, updateSettings } from './settings.ts';
 import { progressStore, recordLesson } from './store.ts';
 import { answerExercise, ask, connectionOf, tutorStore } from './tutor-store.ts';
 import type { TutorTurn } from '../tutor/types.ts';
@@ -110,5 +111,23 @@ describe('backup', () => {
     expect(Object.values(canvasStore.get().nodes).map((n) => n.title)).toEqual(['Guardar']);
     expect(Object.values(boardStore.get().cards).map((c) => c.title)).toEqual(['Estudar']);
     expect(() => importAll({ app: 'outro' })).toThrow();
+  });
+
+  it('never carries the API key, and keeps this device’s key on restore', () => {
+    updateSettings({ apiKey: 'sk-ant-secret', name: 'Ana' });
+    const doc = JSON.parse(JSON.stringify(exportAll()));
+    expect(JSON.stringify(doc)).not.toContain('sk-ant-secret');
+    updateSettings({ apiKey: 'sk-ant-other', name: 'Bia' });
+    importAll(doc);
+    expect(settingsStore.get()).toMatchObject({ apiKey: 'sk-ant-other', name: 'Ana' });
+  });
+
+  it('starts the map’s undo history over after a restore', () => {
+    const doc = JSON.parse(JSON.stringify(exportAll()));
+    editCanvas((c) => ({ ...c, nodes: {} }));
+    saveToMap({ kind: 'note', title: 'Depois' }, { quiet: true });
+    importAll(doc);
+    undoCanvas();
+    expect(Object.values(canvasStore.get().nodes).map((n) => n.title)).toEqual(Object.values(doc.data['chemrster:canvas:v1'].nodes).map((n) => (n as { title: string }).title));
   });
 });

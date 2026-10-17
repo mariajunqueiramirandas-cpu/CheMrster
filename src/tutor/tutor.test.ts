@@ -129,6 +129,9 @@ describe('history', () => {
       { role: 'user', id: 'u2', at: 0, text: 'E aí?' },
       { role: 'assistant', id: 'a2', at: 0, status: 'done', mode: 'offline', parts: [{ type: 'text', text: 'Resposta offline' }] },
       { role: 'assistant', id: 'a3', at: 0, status: 'error', mode: 'ai', parts: [{ type: 'notice', tone: 'error', text: 'falhou' }] },
+      // A declined message is not sent again.
+      { role: 'user', id: 'u3', at: 0, text: 'pedido recusado', refused: true },
+      { role: 'assistant', id: 'a4', at: 0, status: 'done', mode: 'ai', parts: [{ type: 'notice', tone: 'info', text: 'recusado' }] },
     ];
     const api = toApiMessages(turns);
     expect(api).toHaveLength(4);
@@ -316,5 +319,8 @@ describe('tutor engine', () => {
     expect(describeError(new Anthropic.AuthenticationError(401, undefined, 'bad key', headers)).action).toBe('settings');
     expect(describeError(new Anthropic.RateLimitError(429, undefined, 'slow down', headers)).action).toBe('retry');
     expect(describeError(new Error('x')).text).toContain('x');
+    const noKey = { type: 'error', error: { type: 'proxy_not_configured', message: 'sem chave' } };
+    expect(describeError(Anthropic.APIError.generate(503, noKey, 'sem chave', headers)).action).toBe('settings');
+    expect(describeError(Anthropic.APIError.generate(529, { type: 'error', error: { type: 'overloaded_error' } }, 'overloaded', headers)).action).toBe('retry');
   });
 });

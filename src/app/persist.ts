@@ -13,7 +13,22 @@ export interface Persisted<T> {
   restore(stored: unknown): void;
 }
 
-const registry = new Map<string, Persisted<unknown>>();
+export interface PersistOptions<T> {
+  /** What goes into a backup; leave secrets out. Defaults to the whole value. */
+  backup?: (value: T) => unknown;
+  /** Merges a backup into the current value; defaults to reviving the backup alone. */
+  merge?: (backup: unknown, current: T) => T;
+  /** The value was replaced from outside (a restored backup, another tab). */
+  onReplace?: () => void;
+}
+
+const registry = new Map<string, Persisted<unknown> & { backup: () => unknown }>();
+
+/** Called when the browser refuses a write (storage full), with the key that failed. */
+let writeFailed: ((key: string) => boolean) | undefined;
+export function onWriteFailure(handler: (key: string) => boolean) {
+  writeFailed = handler;
+}
 
 function read(key: string): unknown {
   try {
@@ -26,7 +41,7 @@ function read(key: string): unknown {
 }
 
 /** `revive` turns whatever was stored (possibly an older shape, or nothing) into a valid value. */
-export function persisted<T>(key: string, revive: (stored: unknown) => T): Persisted<T> {
+export function persisted<T>(key: string, revive: (stored: unknown) => T, options: PersistOptions<T> = {}): Persisted<T> {
   let state = revive(read(key));
   const listeners = new Set<() => void>();
   const emit = () => {
@@ -37,11 +52,7 @@ export function persisted<T>(key: string, revive: (stored: unknown) => T): Persi
     get: () => state,
     set(next) {
       state = typeof next === 'function' ? (next as (prev: T) => T)(state) : next;
-      try {
-        localStorage.setItem(key, JSON.stringify(state));
-      } catch {
-        // Keep working in memory.
-      }
+      write(key, state);
       emit();
     },
     subscribe(listener) {
@@ -49,19 +60,36 @@ export function persisted<T>(key: string, revive: (stored: unknown) => T): Persi
       return () => listeners.delete(listener);
     },
     restore(stored) {
-      store.set(revive(stored));
+      store.set(options.merge ? options.merge(stored, state) : revive(stored));
+      options.onReplace?.();
     },
   };
-  registry.set(key, store as Persisted<unknown>);
+  registry.set(key, { ...(store as Persisted<unknown>), backup: () => (options.backup ? options.backup(state) : state) });
   // Another tab saved: follow it.
   if (typeof window !== 'undefined') {
     window.addEventListener('storage', (e) => {
       if (e.key !== key) return;
       state = revive(read(key));
+      options.onReplace?.();
       emit();
     });
   }
   return store;
+}
+
+function write(key: string, value: unknown) {
+  const json = JSON.stringify(value);
+  try {
+    localStorage.setItem(key, json);
+  } catch {
+    // Storage full: let the app make room (old tutor history) and try once more; else keep working in memory.
+    if (!writeFailed?.(key)) return;
+    try {
+      localStorage.setItem(key, json);
+    } catch {
+      // Still full.
+    }
+  }
 }
 
 export function usePersisted<T>(store: Persisted<T>): T {
@@ -73,7 +101,7 @@ export function exportAll(): Record<string, unknown> {
   return {
     app: 'chemrster',
     exportedAt: new Date().toISOString(),
-    data: Object.fromEntries([...registry].map(([key, s]) => [key, s.get()])),
+    data: Object.fromEntries([...registry].map(([key, s]) => [key, s.backup()])),
   };
 }
 

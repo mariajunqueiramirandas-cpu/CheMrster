@@ -49,10 +49,24 @@ function sameOrigin(req: IncomingMessage): boolean {
 
 export type Middleware = (req: IncomingMessage, res: ServerResponse, next: () => void) => void;
 
-export function anthropicProxy(apiKey: string | undefined): Middleware {
+/** The Host header's name without the port; `[::1]` keeps its brackets. */
+export function hostName(host: string | undefined): string {
+  if (!host) return '';
+  return host.startsWith('[') ? host.slice(0, host.indexOf(']') + 1) : host.split(':')[0];
+}
+
+/**
+ * `allowedHosts`, when given, is checked against the Host header: a page on another site that
+ * rebinds its own domain name to this server's address still sends its own name as the Host.
+ * (Vite's dev and preview servers already check the host before any middleware runs.)
+ */
+export function anthropicProxy(apiKey: string | undefined, allowedHosts?: string[]): Middleware {
   return (req, res, next) => {
     const url = req.url ?? '';
     if (!url.startsWith(`${PROXY_PREFIX}/`)) return next();
+    if (allowedHosts && !allowedHosts.includes(hostName(req.headers.host).toLowerCase())) {
+      return json(res, 403, apiError('permission_error', 'Host não permitido.'));
+    }
     void handle(req, res, url.slice(PROXY_PREFIX.length), apiKey);
   };
 }
