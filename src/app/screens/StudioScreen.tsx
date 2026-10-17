@@ -1,10 +1,11 @@
 import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { chiralCarbons, classifyChain, functionalGroups, molarMass } from '../../chem/analysis.ts';
 import { MOLECULES } from '../../content/molecules.ts';
-import { subscript } from '../../course/generators.ts';
+import { subscript } from '../../course/kit.ts';
 import { type Annotation, type FormulaKind, STYLES, moleculeFromSmiles, renderSVG } from '../../nanquim/index.ts';
 import { DownloadIcon, PrintIcon } from '../components/Icons.tsx';
 import { type MoleculeLook, MoleculeView } from '../components/MoleculeView.tsx';
+import { ReactionLab } from '../components/ReactionLab.tsx';
 import { href } from '../router.ts';
 
 const FORMULAS: Array<{ id: FormulaKind; label: string }> = [
@@ -180,6 +181,17 @@ export function StudioScreen({ initialSmiles }: { initialSmiles?: string }) {
       </div>
 
       {'mol' in parsed && <Analysis smiles={smiles} />}
+
+      {'mol' in parsed && (
+        <ReactionLab
+          key={smiles}
+          smiles={smiles}
+          onOpen={(product) => {
+            setText(product);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+        />
+      )}
 
       <section className="gallery" aria-labelledby="gallery-title">
         <div className="gallery-head">

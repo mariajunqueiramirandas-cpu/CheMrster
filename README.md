@@ -6,7 +6,7 @@ structure is drawn the way it would look printed in a textbook or on the exam it
 ```
 npm install
 npm run dev        # app at http://localhost:5173
-npm test           # 152 tests: parser, perception, layout, stereo, drawing, ENEM parity, analysis, lessons
+npm test           # 458 tests: parser, layout, drawing, ENEM parity, analysis, reactions, lessons, theory, review
 npm run build      # typecheck + production bundle
 npm run sheet      # render every gallery molecule to PNG contact sheets in ./out
 ```
@@ -17,9 +17,11 @@ npm run sheet      # render every gallery molecule to PNG contact sheets in ./ou
 | --- | --- |
 | `src/nanquim/` | **Nanquim**, the 2D structure-drawing engine (no dependencies) |
 | `src/chem/analysis.ts` | ENEM vocabulary computed from the graph: carbon classes, chain types, functional groups, chiral carbons, cis/trans capability, molar mass |
-| `src/course/` | The organic chemistry track: units, lessons and seeded exercise generators |
+| `src/chem/graph.ts` | SMILES writer (keeps @/@@ and cis/trans), canonical keys ("is this the same substance?"), symmetry classes, and `Draft`, an editable molecule |
+| `src/chem/reactions.ts` | The ENEM reactions as graph edits: additions (Markovnikov), substitution (alkanes, benzene directors), oxidation, combustion, esters, saponification, biodiesel, polymers, peptides, glycosides |
+| `src/course/` | The track: units, lessons, theory cards, seeded exercise generators, spaced review and the studio's reaction lab |
 | `src/content/molecules.ts` | ~75 molecules that keep showing up in ENEM questions |
-| `src/app/` | React app: the lesson path, the lesson player and the *Estruturas* studio |
+| `src/app/` | React app: the lesson path, theory and practice, daily review, and the *Estruturas* studio |
 
 ## Nanquim: structures that look printed
 
@@ -48,6 +50,9 @@ npm run sheet      # render every gallery molecule to PNG contact sheets in ./ou
 - Styles: `enem` (the printed exam, see below), `textbook` (screen), `acs` (journal print)
   and `card`. All lengths are relative to the bond length, so drawings scale without
   changing proportions.
+- **Polymers**: with `polymer: true`, a repeat unit written with two `*` ends
+  (`*CC(*)Cl`) is drawn as textbooks do: the chain levelled between the ends, square
+  brackets crossing the end bonds and a subscript *n*, in every formula style.
 
 ### ENEM parity
 
@@ -83,24 +88,51 @@ Every structure in the app uses the ENEM look, so students practise on the drawi
 will see on exam day; groups being asked about get the booklets' dashed outline.
 
 Lessons are tiles on a periodic table: lesson *n* sits on element *n* and the tiles are
-strung along a zig-zag like a skeletal formula. Thirteen lessons are playable today:
+strung along a zig-zag like a skeletal formula. All twenty lessons, hydrogen to calcium,
+are playable:
 
 1. **O carbono e suas fórmulas**: tetravalence and hidden H, reading three kinds of formula, primary to quaternary carbons
 2. **Cadeias carbônicas**: open/closed/branched, saturated/unsaturated, homogeneous/heterogeneous
 3. **Hidrocarbonetos**: classes and IUPAC names
 4. **Funções orgânicas**: oxygenated, nitrogenated and halides, and everyday ENEM molecules (aspirin, capsaicin…)
 5. **Isomeria**: cis/trans and chiral carbons
+6. **Reações orgânicas**: addition and Markovnikov, substitution in alkanes and benzene (orto/para vs meta), oxidation of alcohols and combustion balancing, esterification, ester names, scents and hydrolysis
+7. **Polímeros e biomoléculas**: addition vs condensation polymers (PE to PET, nylon, Kevlar, PLA), fats, soaps, saponification and biodiesel, amino acids, peptide and glycosidic bonds, aldoses and ketoses
 
-Exercises are generated, not hand-keyed: each lesson draws from curated molecule pools and
-asks the analysis module for the answer, so every replay is different and the answer key
-cannot drift from the chemistry. Types: multiple choice, pick the structure, and tap the
-atoms. Wrong answers come back at the end of the lesson, Duolingo-style. Progress, XP and
-the daily streak live in `localStorage`.
+**Teach, then practise.** Each lesson opens with two to four theory cards: short text with
+the key terms in bold, drawings (reaction schemes with reagents over the arrow, outlined
+groups, marked ring positions) and a line on how the ENEM asks about it. Students can skip
+them, step back, or reread any lesson's theory as one page (`#/teoria/<id>`).
+
+**Generated exercises.** Each lesson draws from curated molecule pools and asks the
+analysis module or the reaction engine for the answer, so every replay is different and the
+answer key cannot drift from the chemistry. Distractors are the classic mistakes, also
+computed: the anti-Markovnikov product, the wrong ring position, over-oxidation, the ester
+read backwards, the polymer that keeps its double bond. Options are compared by canonical
+key, so two drawings of the same substance never appear as different answers. Types:
+multiple choice, pick the structure, and tap the atoms. Wrong answers come back at the end
+of the lesson.
+
+**Spaced review.** Every completed lesson sits in a Leitner box and comes back after 1, 2,
+4, 8 or 16 days: up a box after a good review, back to the first after a bad one. The daily
+review (`#/revisao`) mixes a few fresh questions from each due lesson, interleaved.
+Progress, XP, the daily streak and the review schedule live in `localStorage`.
+
+**Reaction lab.** In *Estruturas*, any structure you type gets the reactions that apply to
+it (hydrogenation, Markovnikov additions, oxidation, esterification, saponification,
+nitration with the right director, polymerization, balanced combustion), with the computed
+product one tap away from the editor.
 
 ## Known limits
 
 - Bridged systems with substituents on the bridge (camphor, the N-methyl of cocaine) still
   overlap a little; a template library would fix the common ones.
-- Units on reactions, polymers and biomolecules are on the path but not written yet.
-- No AI tutor yet. The analysis module and the exercise format are the seam for it: an
-  LLM can explain a wrong answer using the same group/atom data the generator used.
+- The reaction engine follows the textbook rules (Markovnikov, Zaitsev, ring directors,
+  terciário > secundário > primário for bromination); it does not model carbocation
+  rearrangements, and the pools avoid substrates where they matter.
+- Canonical keys ignore stereochemistry, and disaccharides are drawn without it, so maltose
+  and lactose would look the same; only sucrose and maltose are used.
+- Full triglycerides with three long chains still lay out with one tail hanging down; the
+  lessons draw them with R groups, as textbooks do.
+- No AI tutor yet. The analysis module, the reaction engine and the exercise format are the
+  seam for it: an LLM can explain a wrong answer using the same data the generator used.

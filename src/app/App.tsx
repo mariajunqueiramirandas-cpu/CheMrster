@@ -1,7 +1,9 @@
 import { ChainIcon, BoltIcon, FlameIcon, PathIcon } from './components/Icons.tsx';
 import { LessonScreen } from './screens/LessonScreen.tsx';
 import { PathScreen } from './screens/PathScreen.tsx';
+import { ReviewScreen } from './screens/ReviewScreen.tsx';
 import { StudioScreen } from './screens/StudioScreen.tsx';
+import { TheoryScreen } from './screens/TheoryScreen.tsx';
 import { href, useRoute } from './router.ts';
 import { currentStreak, useProgress } from './store.ts';
 
@@ -10,6 +12,7 @@ export function App() {
   const progress = useProgress();
 
   if (route.name === 'lesson') return <LessonScreen key={route.id} id={route.id} />;
+  if (route.name === 'review') return <ReviewScreen />;
 
   const streak = currentStreak(progress);
   return (
@@ -19,7 +22,7 @@ export function App() {
           CheMrster
         </a>
         <nav className="tabs" aria-label="Seções">
-          <a href={href({ name: 'path' })} aria-current={route.name === 'path' ? 'page' : undefined}>
+          <a href={href({ name: 'path' })} aria-current={route.name === 'path' || route.name === 'theory' ? 'page' : undefined}>
             <PathIcon /> <span>Trilha</span>
           </a>
           <a href={href({ name: 'studio' })} aria-current={route.name === 'studio' ? 'page' : undefined}>
@@ -37,7 +40,15 @@ export function App() {
           </span>
         </div>
       </header>
-      <main className="page">{route.name === 'studio' ? <StudioScreen initialSmiles={route.smiles} /> : <PathScreen />}</main>
+      <main className="page">
+        {route.name === 'studio' ? (
+          <StudioScreen initialSmiles={route.smiles} />
+        ) : route.name === 'theory' ? (
+          <TheoryScreen key={route.id} id={route.id} />
+        ) : (
+          <PathScreen />
+        )}
+      </main>
     </div>
   );
 }

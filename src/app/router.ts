@@ -1,15 +1,19 @@
-/** Hash routes: #/ (trilha), #/licao/<id>, #/estruturas[?smiles=...]. */
+/** Hash routes: #/ (trilha), #/licao/<id>, #/teoria/<id>, #/revisao, #/estruturas[?smiles=...]. */
 import { useEffect, useState } from 'react';
 
 export type Route =
   | { name: 'path' }
   | { name: 'lesson'; id: string }
+  | { name: 'theory'; id: string }
+  | { name: 'review' }
   | { name: 'studio'; smiles?: string };
 
 export function parseRoute(hash: string): Route {
   const [path, query = ''] = hash.replace(/^#/, '').split('?');
   const parts = path.split('/').filter(Boolean);
   if (parts[0] === 'licao' && parts[1]) return { name: 'lesson', id: decodeURIComponent(parts[1]) };
+  if (parts[0] === 'teoria' && parts[1]) return { name: 'theory', id: decodeURIComponent(parts[1]) };
+  if (parts[0] === 'revisao') return { name: 'review' };
   if (parts[0] === 'estruturas') {
     const smiles = new URLSearchParams(query).get('smiles') ?? undefined;
     return { name: 'studio', smiles };
@@ -19,6 +23,8 @@ export function parseRoute(hash: string): Route {
 
 export function href(route: Route): string {
   if (route.name === 'lesson') return `#/licao/${encodeURIComponent(route.id)}`;
+  if (route.name === 'theory') return `#/teoria/${encodeURIComponent(route.id)}`;
+  if (route.name === 'review') return '#/revisao';
   if (route.name === 'studio') return route.smiles ? `#/estruturas?smiles=${encodeURIComponent(route.smiles)}` : '#/estruturas';
   return '#/';
 }

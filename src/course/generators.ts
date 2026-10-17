@@ -16,7 +16,23 @@ import {
   hydrocarbonClass,
 } from '../chem/analysis.ts';
 import { MOLECULE_BY_ID } from '../content/molecules.ts';
-import { type Molecule, moleculeFromSmiles } from '../nanquim/index.ts';
+import type { Molecule } from '../nanquim/index.ts';
+import {
+  cap,
+  carbons,
+  choice,
+  joinPt,
+  lessonSet,
+  lookalikes,
+  lowerFirst,
+  mol,
+  numberOptions,
+  orderedChoice,
+  pick,
+  plural,
+  subscript,
+  tap,
+} from './kit.ts';
 import {
   ALKANES,
   ALKENES,
@@ -33,87 +49,9 @@ import {
   type Named,
 } from './pools.ts';
 import type { Rng } from './random.ts';
-import type { ChoiceExercise, Exercise, MolSpec, PickStructureExercise, TapAtomsExercise } from './types.ts';
+import type { Exercise } from './types.ts';
 
-const cache = new Map<string, Molecule>();
-export function mol(smiles: string): Molecule {
-  let m = cache.get(smiles);
-  if (!m) {
-    m = moleculeFromSmiles(smiles);
-    cache.set(smiles, m);
-  }
-  return m;
-}
-
-const SUBSCRIPTS = '₀₁₂₃₄₅₆₇₈₉';
-const joinPt = (items: string[]) =>
-  items.length <= 1 ? items.join('') : `${items.slice(0, -1).join(', ')} e ${items[items.length - 1]}`;
-export const subscript = (formula: string) => formula.replace(/\d/g, (d) => SUBSCRIPTS[Number(d)]);
-const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
-const lowerFirst = (s: string) => s[0].toLowerCase() + s.slice(1);
-const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
-const carbons = (m: Molecule) => m.atoms.filter((a) => a.element === 'C').map((a) => a.index);
-
-function choice(
-  rng: Rng,
-  prompt: string,
-  correct: string,
-  distractors: string[],
-  explain: string,
-  molecule?: MolSpec,
-): ChoiceExercise {
-  const unique = [...new Set(distractors.filter((d) => d !== correct))];
-  const options = rng.shuffle([correct, ...unique]);
-  return { kind: 'choice', prompt, molecule, options, answer: options.indexOf(correct), explain };
-}
-
-/** Options kept in their natural order (numbers, yes/no). */
-function orderedChoice(prompt: string, options: string[], correct: string, explain: string, molecule?: MolSpec): ChoiceExercise {
-  return { kind: 'choice', prompt, molecule, options, answer: options.indexOf(correct), explain };
-}
-
-function numberOptions(rng: Rng, answer: number, min = 0): string[] {
-  const start = Math.max(min, answer - rng.int(3));
-  return [0, 1, 2, 3].map((k) => String(start + k));
-}
-
-function pick(
-  rng: Rng,
-  prompt: string,
-  correct: MolSpec,
-  distractors: MolSpec[],
-  explain: string,
-  molecule?: MolSpec,
-): PickStructureExercise {
-  const options = rng.shuffle([correct, ...distractors]);
-  return { kind: 'pick', prompt, molecule, options, answer: options.indexOf(correct), explain };
-}
-
-function tap(prompt: string, molecule: MolSpec, answer: number[], explain: string, tappable?: number[]): TapAtomsExercise {
-  return { kind: 'tap', prompt, molecule, answer: [...answer].sort((a, b) => a - b), explain, tappable };
-}
-
-/** Distractors that look alike: isomers first, then molecules of similar size. */
-function lookalikes(rng: Rng, target: Named, pool: Named[], count: number): Named[] {
-  const formula = mol(target.smiles).formula();
-  const size = carbons(mol(target.smiles)).length;
-  const others = pool.filter((p) => p.smiles !== target.smiles && p.name !== target.name);
-  const isomers = rng.shuffle(others.filter((p) => mol(p.smiles).formula() === formula));
-  const near = rng
-    .shuffle(others.filter((p) => !isomers.includes(p)))
-    .sort((a, b) => Math.abs(carbons(mol(a.smiles)).length - size) - Math.abs(carbons(mol(b.smiles)).length - size));
-  return [...isomers, ...near].slice(0, count);
-}
-
-function lessonSet(rng: Rng, makers: Array<() => Exercise | undefined>, count = 8): Exercise[] {
-  const out: Exercise[] = [];
-  let guard = 0;
-  while (out.length < count && guard++ < count * 6) {
-    const ex = makers[out.length % makers.length]();
-    if (ex) out.push(ex);
-  }
-  return rng.shuffle(out);
-}
+export { subscript } from './kit.ts';
 
 // ---------------------------------------------------------------------------
 // Unidade 1 — o carbono e suas fórmulas
@@ -366,7 +304,11 @@ export function saturation(rng: Rng): Exercise[] {
     );
   };
   const tapUnsat = () => {
-    const item = rng.pick(pool.filter((c) => classifyChain(mol(c.smiles)).insaturada && !classifyChain(mol(c.smiles)).aromatica));
+    // Exactly one C=C or C≡C, so "the two carbons" is the whole answer (dienes would be every atom).
+    const single = (c: Named) =>
+      !classifyChain(mol(c.smiles)).aromatica &&
+      mol(c.smiles).bonds.filter((b) => b.order > 1 && mol(c.smiles).atoms[b.a].element === 'C' && mol(c.smiles).atoms[b.b].element === 'C').length === 1;
+    const item = rng.pick(pool.filter(single));
     const m = mol(item.smiles);
     const atoms = new Set<number>();
     for (const b of m.bonds) {
@@ -521,6 +463,7 @@ export function hydrocarbonNames(rng: Rng): Exercise[] {
 // ---------------------------------------------------------------------------
 // Unidade 4 — funções orgânicas
 
+const FEMININE = new Set<FunctionId>(['cetona', 'amina', 'amida', 'nitrila']);
 const OXYGENATED: FunctionId[] = ['álcool', 'fenol', 'enol', 'aldeído', 'cetona', 'ácido carboxílico', 'éster', 'éter'];
 const NITROGENATED: FunctionId[] = ['amina', 'amida', 'nitrila', 'nitrocomposto', 'haleto orgânico'];
 
@@ -550,7 +493,7 @@ function functionLesson(rng: Rng, family: FunctionId[]): Exercise[] {
     );
     return pick(
       rng,
-      `Qual destas substâncias é um(a) ${fn}?`,
+      `Qual destas substâncias é ${FEMININE.has(fn) ? 'uma' : 'um'} ${fn}?`,
       { smiles: target.smiles, name: target.name },
       others.map((o) => ({ smiles: o.smiles, name: o.name })),
       `${FUNCTION_INFO[fn].hint} É o caso do ${target.name}.`,

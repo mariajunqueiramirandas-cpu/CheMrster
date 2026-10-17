@@ -1,8 +1,11 @@
 /**
- * The organic chemistry track, from "what is a carbon chain" to stereochemistry.
+ * The organic chemistry track, from "what is a carbon chain" to proteins and plastics.
  * Each lesson sits on an element tile; its atomic number is its place in the path.
  */
 import * as g from './generators.ts';
+import * as life from './life-generators.ts';
+import * as rxn from './reaction-generators.ts';
+import { THEORY } from './theory/index.ts';
 import type { Lesson, Unit } from './types.ts';
 
 const lesson = (
@@ -12,7 +15,7 @@ const lesson = (
   title: string,
   summary: string,
   generate?: Lesson['generate'],
-): Lesson => ({ id, element: { number, symbol }, title, summary, generate });
+): Lesson => ({ id, element: { number, symbol }, title, summary, generate, theory: THEORY[id] });
 
 export const COURSE: Unit[] = [
   {
@@ -66,21 +69,22 @@ export const COURSE: Unit[] = [
   {
     id: 'reacoes',
     title: 'Reações orgânicas',
-    description: 'Adição, substituição, oxidação e combustão.',
+    description: 'Adição, substituição, oxidação, combustão e esterificação.',
     lessons: [
-      lesson(14, 'Si', 'adicao', 'Adição', 'Hidrogenação e halogenação de alcenos.'),
-      lesson(15, 'P', 'substituicao', 'Substituição', 'Halogenação de alcanos e aromáticos.'),
-      lesson(16, 'S', 'oxidacao', 'Oxidação', 'Do álcool ao ácido.'),
+      lesson(14, 'Si', 'adicao', 'Adição', 'Hidrogenação, halogenação e a regra de Markovnikov.', rxn.addition),
+      lesson(15, 'P', 'substituicao', 'Substituição', 'Halogenação de alcanos e reações do benzeno.', rxn.substitution),
+      lesson(16, 'S', 'oxidacao', 'Oxidação e combustão', 'Do álcool ao ácido, e o balanço da queima.', rxn.oxidation),
+      lesson(17, 'Cl', 'esterificacao', 'Ésteres', 'Esterificação, nomes, aromas e hidrólise.', rxn.esterification),
     ],
   },
   {
     id: 'polimeros',
     title: 'Polímeros e biomoléculas',
-    description: 'Plásticos, sabões, gorduras e proteínas.',
+    description: 'Plásticos, gorduras, sabões, proteínas e açúcares.',
     lessons: [
-      lesson(17, 'Cl', 'polimeros', 'Polímeros', 'Adição e condensação.'),
-      lesson(18, 'Ar', 'lipidios', 'Gorduras e sabões', 'Saponificação e biodiesel.'),
-      lesson(19, 'K', 'proteinas', 'Proteínas e açúcares', 'Ligação peptídica e glicosídica.'),
+      lesson(18, 'Ar', 'polimeros', 'Polímeros', 'Adição e condensação: do eteno ao PET.', life.polymers),
+      lesson(19, 'K', 'lipidios', 'Gorduras e sabões', 'Saponificação, biodiesel e como o sabão limpa.', life.fats),
+      lesson(20, 'Ca', 'proteinas', 'Proteínas e açúcares', 'Ligação peptídica e glicosídica.', life.biomolecules),
     ],
   },
 ];
