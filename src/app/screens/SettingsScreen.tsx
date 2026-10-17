@@ -1,11 +1,65 @@
 /** Ajustes: the tutor's connection, study preferences, theme, and the learner's data (backup, restore, reset). */
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useAccounts } from '../account.ts';
+import { type SyncState, deleteAccountData, useSyncState } from '../cloud-sync.ts';
 import { DownloadIcon, TutorIcon } from '../components/Icons.tsx';
+import { UsageMeter } from '../components/UsageMeter.tsx';
 import { exportAll, importAll } from '../persist.ts';
 import { DAILY_GOALS, TUTOR_MODELS, type Theme, updateSettings, useSettings } from '../settings.ts';
 import { resetProgress } from '../store.ts';
 import { toast } from '../toast.ts';
-import { tutorStore, useConnection } from '../tutor-store.ts';
+import { href } from '../router.ts';
+import { refreshTutorUsage, tutorStore, useConnection, useTutorUsage } from '../tutor-store.ts';
+
+const SYNC_TEXT: Record<SyncState, string> = {
+  loading: 'Carregando seus dados…',
+  saving: 'Salvando na sua conta…',
+  saved: 'Tudo salvo na sua conta.',
+  offline: 'Sem conexão: as mudanças ficam neste aparelho e vão para a conta quando a internet voltar.',
+  error: 'Não foi possível salvar na sua conta agora.',
+};
+
+/** Ajustes → Conta, when accounts are on: where the data lives, the plan and today's tutor allowance. */
+function AccountSection() {
+  const sync = useSyncState();
+  const usage = useTutorUsage();
+  useEffect(() => refreshTutorUsage(), []);
+  return (
+    <section className="settings-section" aria-labelledby="set-account">
+      <h2 id="set-account">Conta</h2>
+      <p className={`settings-status settings-status--${sync === 'error' ? 'error' : sync === 'offline' ? 'off' : 'on'}`} role="status">
+        {SYNC_TEXT[sync]}
+      </p>
+      <p className="settings-note">Progresso, quadro, mapas, conversas e preferências ficam na sua conta e aparecem em qualquer aparelho em que você entrar.</p>
+      {usage && (
+        <>
+          <p>
+            Plano <strong>{usage.plan === 'plus' ? 'Pro' : 'Grátis'}</strong>
+          </p>
+          <UsageMeter used={usage.used} limit={usage.limit} />
+        </>
+      )}
+      <div className="settings-actions">
+        <a className="btn" href={href({ name: 'plans' })}>
+          {usage?.plan === 'plus' ? 'Gerenciar plano' : 'Ver planos'}
+        </a>
+      </div>
+      <div className="settings-actions settings-actions--danger">
+        <button
+          type="button"
+          className="btn btn--quiet btn--danger"
+          onClick={async () => {
+            if (!confirm('Apagar todos os seus dados da conta e deste aparelho (progresso, quadro, mapas e conversas)? Isso não pode ser desfeito.')) return;
+            if (await deleteAccountData()) location.reload();
+            else toast('Não foi possível apagar agora. Verifique a conexão e tente de novo.');
+          }}
+        >
+          Apagar meus dados
+        </button>
+      </div>
+    </section>
+  );
+}
 
 const THEMES: Array<{ id: Theme; label: string }> = [
   { id: 'system', label: 'Do aparelho' },
@@ -16,6 +70,7 @@ const THEMES: Array<{ id: Theme; label: string }> = [
 export function SettingsScreen() {
   const settings = useSettings();
   const connection = useConnection();
+  const accounts = useAccounts();
   const [showKey, setShowKey] = useState(false);
   const [test, setTest] = useState<{ state: 'idle' | 'testing' | 'ok' | 'error'; text?: string }>({ state: 'idle' });
   const file = useRef<HTMLInputElement>(null);
@@ -53,7 +108,9 @@ export function SettingsScreen() {
 
   const status =
     connection.kind === 'server'
-      ? 'Conectado pelo servidor do app: a chave fica no servidor.'
+      ? accounts
+        ? 'Conectado pelo servidor do app, dentro do limite diário do seu plano.'
+        : 'Conectado pelo servidor do app: a chave fica no servidor.'
       : connection.kind === 'key'
         ? 'Conectado com a sua chave da API.'
         : connection.checked
@@ -63,6 +120,8 @@ export function SettingsScreen() {
   return (
     <div className="settings">
       <h1>Ajustes</h1>
+
+      {accounts && <AccountSection />}
 
       <section className="settings-section" aria-labelledby="set-tutor">
         <h2 id="set-tutor">
@@ -166,7 +225,9 @@ export function SettingsScreen() {
       <section className="settings-section" aria-labelledby="set-data">
         <h2 id="set-data">Seus dados</h2>
         <p className="settings-note">
-          Progresso, quadro, mapas e conversas ficam guardados neste navegador. Faça um backup para levar para outro aparelho.
+          {accounts
+            ? 'Além da sua conta, você pode guardar uma cópia em arquivo e restaurá-la quando quiser.'
+            : 'Progresso, quadro, mapas e conversas ficam guardados neste navegador. Faça um backup para levar para outro aparelho.'}
         </p>
         <div className="settings-actions">
           <button type="button" className="btn" onClick={download}>

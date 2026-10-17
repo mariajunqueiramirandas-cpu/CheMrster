@@ -13,6 +13,7 @@ import { titleFrom, toApiMessages } from '../tutor/history.ts';
 import { offlineReply } from '../tutor/offline.ts';
 import { analyze, describeExercise, makeExercise, react } from '../tutor/tools.ts';
 import type { Part, Thread, TutorTurn, UserTurn } from '../tutor/types.ts';
+import { authFetch } from './account.ts';
 import { addTasks, removeCards, seedBoard } from './board-store.ts';
 import { addCluster, removeFromMap } from './canvas-store.ts';
 import { memory, onWriteFailure, persisted, uid, usePersisted } from './persist.ts';
@@ -82,18 +83,38 @@ export type Connection = { kind: 'server' } | { kind: 'key'; apiKey: string } | 
 const server = memory<boolean | undefined>(undefined);
 let checking: Promise<boolean> | undefined;
 
+/** With accounts on, how much of today's allowance the learner has used on the server's key. */
+export interface TutorUsage {
+  plan: 'free' | 'plus';
+  limit: number;
+  used: number;
+}
+const usage = memory<TutorUsage | undefined>(undefined);
+export const useTutorUsage = usage.use;
+
+async function fetchStatus(): Promise<boolean> {
+  try {
+    const r = await authFetch('/api/anthropic/status', { headers: { accept: 'application/json' }, cache: 'no-store' });
+    if (!r.ok) return false;
+    const j = (await r.json()) as { available?: unknown } & Partial<TutorUsage>;
+    if (typeof j.limit === 'number' && typeof j.used === 'number') usage.set({ plan: j.plan === 'plus' ? 'plus' : 'free', limit: j.limit, used: j.used });
+    return j.available === true;
+  } catch {
+    return false;
+  }
+}
+
 /** Whether this site's server holds an API key (the proxy in server/anthropic-proxy.ts). */
 export function checkServer(): Promise<boolean> {
-  checking ??= fetch('/api/anthropic/status', { headers: { accept: 'application/json' } })
-    .then((r) => (r.ok ? r.json() : { available: false }))
-    .then((j: { available?: unknown }) => j.available === true)
-    .catch(() => false)
-    .then((ok) => {
-      server.set(ok);
-      return ok;
-    });
+  checking ??= fetchStatus().then((ok) => {
+    server.set(ok);
+    return ok;
+  });
   return checking;
 }
+
+/** Re-reads the day's usage (after the tutor answers, or a plan change). */
+export const refreshTutorUsage = () => void fetchStatus();
 
 /** The learner's own key wins; otherwise the server's; otherwise the offline tutor. */
 export function connectionOf(apiKey: string, serverReady: boolean | undefined): Connection {
@@ -113,7 +134,8 @@ export function useConnection(): Connection & { checked: boolean } {
 async function clientFor(c: Exclude<Connection, { kind: 'offline' }>): Promise<Anthropic> {
   const { default: Anthropic } = await import('@anthropic-ai/sdk');
   // Through the server, the proxy adds the real key; the browser never sees it.
-  if (c.kind === 'server') return new Anthropic({ apiKey: 'via-servidor', baseURL: `${location.origin}/api/anthropic`, dangerouslyAllowBrowser: true });
+  // With accounts on, each request carries the learner's session so the server can check their plan.
+  if (c.kind === 'server') return new Anthropic({ apiKey: 'via-servidor', baseURL: `${location.origin}/api/anthropic`, dangerouslyAllowBrowser: true, fetch: authFetch });
   return new Anthropic({ apiKey: c.apiKey, dangerouslyAllowBrowser: true });
 }
 
@@ -309,6 +331,7 @@ async function respond(threadId: string) {
     commit(threadId, { ...turn, parts, status: 'error' });
   } finally {
     apiOf.delete(turn.id);
+    if (connection.kind === 'server' && usage.get()) refreshTutorUsage();
   }
 }
 

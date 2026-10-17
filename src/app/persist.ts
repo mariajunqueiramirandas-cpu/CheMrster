@@ -22,7 +22,14 @@ export interface PersistOptions<T> {
   onReplace?: () => void;
 }
 
-const registry = new Map<string, Persisted<unknown> & { backup: () => unknown }>();
+const registry = new Map<string, Persisted<unknown> & { backup: () => unknown; reset: () => void }>();
+
+/** Every change made on this page (not ones followed from another tab), for the account sync. */
+const changeListeners = new Set<(key: string) => void>();
+export function onChange(listener: (key: string) => void): () => void {
+  changeListeners.add(listener);
+  return () => changeListeners.delete(listener);
+}
 
 /** Called when the browser refuses a write (storage full), with the key that failed. */
 let writeFailed: ((key: string) => boolean) | undefined;
@@ -54,6 +61,7 @@ export function persisted<T>(key: string, revive: (stored: unknown) => T, option
       state = typeof next === 'function' ? (next as (prev: T) => T)(state) : next;
       write(key, state);
       emit();
+      for (const l of changeListeners) l(key);
     },
     subscribe(listener) {
       listeners.add(listener);
@@ -64,7 +72,14 @@ export function persisted<T>(key: string, revive: (stored: unknown) => T, option
       options.onReplace?.();
     },
   };
-  registry.set(key, { ...(store as Persisted<unknown>), backup: () => (options.backup ? options.backup(state) : state) });
+  registry.set(key, {
+    ...(store as Persisted<unknown>),
+    backup: () => (options.backup ? options.backup(state) : state),
+    reset: () => {
+      store.set(revive(undefined));
+      options.onReplace?.();
+    },
+  });
   // Another tab saved: follow it.
   if (typeof window !== 'undefined') {
     window.addEventListener('storage', (e) => {
@@ -119,6 +134,11 @@ export function importAll(doc: unknown): number {
     restored++;
   }
   return restored;
+}
+
+/** Puts every store back to a fresh start (another account signs in on this device). */
+export function resetAll() {
+  for (const store of registry.values()) store.reset();
 }
 
 /** A value shared with React but not saved: what is streaming, which panel is open. */

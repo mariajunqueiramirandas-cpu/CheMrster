@@ -5,19 +5,31 @@ structure is drawn the way it would look printed in a textbook or on the exam it
 with an AI tutor that checks its chemistry against the same engine that grades the
 exercises, a progress tracker, a study board and an infinite concept map.
 
+It runs as a SaaS: learners sign in with [Clerk](https://clerk.com), their data is saved to
+their account (Postgres) and follows them across devices, and the AI tutor runs on the
+server's key within a daily allowance set by their plan (*Grátis*, or *Pro*, a monthly
+subscription paid through [Mercado Pago](https://www.mercadopago.com.br)).
+Deployment is one `docker-compose.yml`, made for [Dokploy](https://dokploy.com); see
+[Deploying](#deploying-docker-compose-on-dokploy).
+
 ```
 npm install
 npm run dev        # app at http://localhost:5173
-npm test           # 511 tests: drawing, chemistry, lessons, review, progress, board, canvas, tutor, proxy
+npm test           # 535 tests: drawing, chemistry, lessons, review, progress, board, canvas, tutor, proxy, API, sync
 npm run build      # typecheck + production bundle
-npm run serve      # serve ./dist with the tutor's API proxy (after npm run build)
+npm run serve      # the production server: ./dist plus the API (after npm run build)
 npm run sheet      # render every gallery molecule to PNG contact sheets in ./out
 ```
 
-To turn on the AI tutor, either put `ANTHROPIC_API_KEY=sk-ant-...` in `.env.local` (or the
-environment) before `npm run dev` / `npm run serve`, so the key stays on the server, or paste
-a key in *Ajustes* inside the app, where it stays on that device. Without a key the tutor
-still works offline from the course's own content.
+Configuration is environment variables, read from `.env.local` by `npm run dev` and from the
+environment by `npm run serve`; `.env.example` lists them all. With none set, the app runs as
+it always did: no sign-in, data on the device only. To develop with accounts, put the Clerk
+development keys (`CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`) in `.env.local`; without
+`DATABASE_URL` account data is kept in memory until the dev server restarts.
+
+To turn on the AI tutor, either put `ANTHROPIC_API_KEY=sk-ant-...` in the environment, so the
+key stays on the server, or paste a key in *Ajustes* inside the app, where it stays on that
+device. Without a key the tutor still works offline from the course's own content.
 
 ## What is in here
 
@@ -31,8 +43,14 @@ still works offline from the course's own content.
 | `src/content/molecules.ts` | ~75 molecules that keep showing up in ENEM questions |
 | `src/tutor/` | The AI tutor: system prompt with the whole course, learner context, tools backed by the chemistry engine, the streaming tool-use loop, its markup, and the offline tutor |
 | `src/study/` | Learning models: mastery with a forgetting curve, the study calendar and review forecast, the kanban board, and the concept-map canvas with its geometry |
-| `server/anthropic-proxy.ts` | Forwards the Messages API to Anthropic with the server's key, for `dev`, `preview` and `serve` |
-| `src/app/` | React app: the lesson path, theory and practice, daily review, the *Estruturas* studio, the tutor, *Mapa*, *Quadro*, *Progresso* and *Ajustes* |
+| `server/anthropic-proxy.ts` | Forwards the Messages API to Anthropic with the server's key, behind a gate (sign-in and daily allowance) when accounts are on |
+| `server/api.ts` | The SaaS API: runtime config, health, the learner's saved state, Clerk webhooks, and the tutor's plan allowance |
+| `server/auth.ts`, `server/db.ts` | Clerk session verification; Postgres storage (state with revisions, daily tutor usage, subscriptions) and an in-memory twin for dev and tests |
+| `server/billing.ts` | Pro through Mercado Pago subscriptions: checkout, reading subscriptions back, cancelling, and the signed webhook |
+| `server/main.ts` | The production server: static files plus the API, configured from the environment (`server/config.ts`) |
+| `Dockerfile`, `docker-compose.yml` | The image and the app + Postgres stack for Dokploy |
+| `src/app/` | React app: the lesson path, theory and practice, daily review, the *Estruturas* studio, the tutor, *Mapa*, *Quadro*, *Progresso*, *Ajustes* and *Planos* |
+| `src/app/SaasRoot.tsx`, `cloud-sync.ts` | With accounts: Clerk's provider, the landing page for visitors, and the sync between the device and the account |
 
 ## Nanquim: structures that look printed
 
@@ -199,6 +217,83 @@ Everything a learner makes lives in `localStorage`; *Ajustes* exports and restor
 (the API key is never included). If storage fills up, the oldest tutor conversations are
 dropped first so progress, board and map keep saving.
 
+## Accounts, sync and plans
+
+When the server has Clerk keys, `GET /api/config` hands the browser the publishable key (so one
+image serves any Clerk instance) and the app loads Clerk with its pt-BR localization. Visitors
+see a landing page with sign-in, sign-up and the plans; signed-in learners get the app
+with their account menu in the top bar, an account section in *Ajustes* and *Planos*
+(`#/planos`).
+
+**Sync.** The device keeps working from `localStorage`, so the app stays instant and works
+offline. The account holds the same document as a backup, with a revision number: changes are
+saved a moment after they happen and when the page is hidden, and every save names the revision
+it was based on, so a device that missed another device's save gets a 409 and loads the newer
+copy instead of overwriting it. On sign-in the account's copy replaces the device's, except for
+a new account on a device whose data predates accounts, which is adopted. Another account's data
+on the device is cleared before anything is shown. *Apagar meus dados* deletes the account's
+copy, and the Clerk `user.deleted` webhook (optional) does the same when an account is deleted.
+
+**Tutor allowance.** With accounts on, the tutor proxy only serves signed-in learners, only the
+tutor's models and within its token cap, and counts requests per learner per day
+(`America/Sao_Paulo` midnight): `TUTOR_DAILY_LIMIT_FREE` (20) on *Grátis* and
+`TUTOR_DAILY_LIMIT_PLUS` (400) on *Pro*. Over the limit the tutor says so and points to *Planos*; the offline
+tutor keeps answering. A learner's own API key in *Ajustes* bypasses the server entirely.
+
+**Payments (Mercado Pago).** *Pro* is a monthly subscription in reais (`PRO_PRICE_BRL`,
+R$ 19,90 by default) through Mercado Pago's subscriptions API (`/preapproval`), paid with a card
+or Mercado Pago balance:
+
+1. In *Planos*, the learner confirms the e-mail of their Mercado Pago account (their account
+   e-mail by default; Mercado Pago wants the one they pay with) and the server creates a pending
+   subscription with `external_reference` = their Clerk user id.
+2. They pay on Mercado Pago's page (`init_point`) and come back to `/?assinatura=retorno`; the
+   app asks the server to read the subscription back.
+3. Mercado Pago's webhook (`/api/webhooks/mercadopago`, events *Planos e assinaturas*) reports
+   new subscriptions, monthly charges, pauses and cancellations. Its signature is checked with
+   `MERCADO_PAGO_WEBHOOK_SECRET`, and whatever it names is fetched again from Mercado Pago with
+   the access token: the server never takes a subscription's state from a browser or a
+   notification body.
+
+A learner is on *Pro* while their subscription is `authorized`; after cancelling (in *Planos*)
+they keep *Pro* until the end of the month already paid. Mercado Pago pauses a subscription
+whose charge fails, which ends *Pro* at that date too. Subscriptions live in the `subscriptions`
+table; *Apagar meus dados* does not remove them (they are payment records).
+
+## Deploying (Docker Compose on Dokploy)
+
+`docker-compose.yml` runs two services: `app` (this repository's `Dockerfile`: Node 22 serving
+the build and the API on port 3000, with a health check at `/api/health`) and `db` (Postgres 17
+with a named volume, so Dokploy's volume backups can back it up). Tables are created on start.
+
+1. **Clerk production instance.** In the Clerk dashboard (or with the Clerk MCP's
+   `create_production_instance`), create the production instance on your domain and add the DNS
+   records it asks for. Production needs your own OAuth credentials for any social sign-in you
+   turn on.
+2. **Mercado Pago.** In [Suas integrações](https://www.mercadopago.com.br/developers/panel/app),
+   create an application (product: *Assinaturas*), take the production **Access Token**, and
+   under **Webhooks** add `https://your.domain/api/webhooks/mercadopago` with the *Planos e
+   assinaturas* events; copy the secret signature it shows. To try it first, use the test
+   credentials and Mercado Pago's test users (one seller, one buyer).
+3. **Dokploy.** Create a project, then *Create Service → Compose*, source: this repository,
+   compose path `./docker-compose.yml`.
+4. **Environment** tab: set `APP_URL` (`https://your.domain`), `CLERK_PUBLISHABLE_KEY` and
+   `CLERK_SECRET_KEY` (the `pk_live_`/`sk_live_` pair), `POSTGRES_PASSWORD` (letters, digits,
+   `-` and `_` only), `ANTHROPIC_API_KEY`, `MERCADO_PAGO_ACCESS_TOKEN` and
+   `MERCADO_PAGO_WEBHOOK_SECRET`; optionally `PRO_PRICE_BRL`, the limits and
+   `CLERK_WEBHOOK_SIGNING_SECRET`. Compose refuses to start without the required ones.
+5. **Advanced**: turn on *Isolated Deployments*, so `app` reaches `db` while Dokploy routes the
+   domain to `app` (without it, add `dokploy-network` to `db` as well).
+6. **Domains** tab: add your domain for service `app`, port `3000`, HTTPS on with Let's Encrypt.
+   Point the domain's A record at the Dokploy server.
+7. **Deploy.** The app logs `CheMrster em http://localhost:3000 (contas Clerk ligadas; tutor com
+   IA ligado)` once it is up.
+8. **Clerk webhook** (optional): in Clerk → Webhooks, add `https://your.domain/api/webhooks/clerk`
+   with the `user.deleted` event and put its signing secret in `CLERK_WEBHOOK_SIGNING_SECRET`.
+
+Anywhere else with Docker: `cp .env.example .env`, fill it in, `docker compose up -d --build`,
+and put a TLS-terminating proxy in front of port 3000.
+
 ## Known limits
 
 - Bridged systems with substituents on the bridge (camphor, the N-methyl of cocaine) still
@@ -210,7 +305,10 @@ dropped first so progress, board and map keep saving.
   and lactose would look the same; only sucrose and maltose are used.
 - Full triglycerides with three long chains still lay out with one tail hanging down; the
   lessons draw them with R groups, as textbooks do.
-- Data stays on one device; there is no account or sync beyond the JSON backup.
-- `npm run serve` listens on 127.0.0.1 and answers only to localhost names. Serving others
+- Sync is per document, not per change: when two devices edit while both are offline, the one
+  that saves second loads the other's copy and its own changes since the last save are lost
+  (it says so).
+- Pro is monthly only; there is no yearly price or free trial yet.
+- Without Clerk keys, `npm run serve` answers only to localhost names. Serving others that way
   (`HOST=0.0.0.0 ALLOWED_HOSTS=your.domain`) lets anyone who can open the page use the
-  server's API key: put it behind your own login first.
+  server's API key; turn accounts on instead.

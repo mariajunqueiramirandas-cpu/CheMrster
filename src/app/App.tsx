@@ -1,4 +1,5 @@
-import { Suspense, lazy, useEffect } from 'react';
+import { type ReactNode, Suspense, lazy, useEffect } from 'react';
+import { useAccounts } from './account.ts';
 import { BoardIcon, BoltIcon, ChainIcon, ChartIcon, FlameIcon, MapIcon, PathIcon, SlidersIcon, TutorIcon } from './components/Icons.tsx';
 import { Toasts } from './components/Toasts.tsx';
 import { TutorPanel } from './components/tutor/TutorPanel.tsx';
@@ -17,6 +18,7 @@ const BoardScreen = lazy(() => import('./screens/BoardScreen.tsx').then((m) => (
 const CanvasScreen = lazy(() => import('./screens/CanvasScreen.tsx').then((m) => ({ default: m.CanvasScreen })));
 const ProgressScreen = lazy(() => import('./screens/ProgressScreen.tsx').then((m) => ({ default: m.ProgressScreen })));
 const SettingsScreen = lazy(() => import('./screens/SettingsScreen.tsx').then((m) => ({ default: m.SettingsScreen })));
+const PlansScreen = lazy(() => import('./screens/PlansScreen.tsx').then((m) => ({ default: m.PlansScreen })));
 const TutorScreen = lazy(() => import('./screens/TutorScreen.tsx').then((m) => ({ default: m.TutorScreen })));
 
 const TABS: Array<{ route: Route; label: string; icon: typeof PathIcon; match: Route['name'][] }> = [
@@ -27,8 +29,11 @@ const TABS: Array<{ route: Route; label: string; icon: typeof PathIcon; match: R
   { route: { name: 'studio' }, label: 'Estruturas', icon: ChainIcon, match: ['studio'] },
 ];
 
-function Screen({ route }: { route: Route }) {
+function Screen({ route, accounts }: { route: Route; accounts: boolean }) {
   switch (route.name) {
+    // The pricing table needs Clerk, which only the app with accounts has.
+    case 'plans':
+      return accounts ? <PlansScreen /> : <PathScreen />;
     case 'studio':
       return <StudioScreen initialSmiles={route.smiles} />;
     case 'theory':
@@ -54,10 +59,13 @@ const PAGE_CLASS: Partial<Record<Route['name'], string>> = {
   board: 'page page--full',
   progress: 'page page--wide',
   settings: 'page',
+  plans: 'page page--wide',
 };
 
-export function App() {
+/** `account` is the signed-in learner's menu (Clerk's UserButton), when accounts are on. */
+export function App({ account }: { account?: ReactNode } = {}) {
   const route = useRoute();
+  const accounts = useAccounts();
   const progress = useProgress();
   const { theme } = useSettings();
   const tutor = useTutorPanel();
@@ -131,11 +139,12 @@ export function App() {
           <a className="icon-btn" href={href({ name: 'settings' })} aria-label="Ajustes" aria-current={route.name === 'settings' ? 'page' : undefined}>
             <SlidersIcon />
           </a>
+          {account && <div className="topbar-account">{account}</div>}
         </div>
       </header>
       <main className={PAGE_CLASS[route.name] ?? 'page'}>
         <Suspense fallback={<p className="page-loading">Carregando…</p>}>
-          <Screen route={route} />
+          <Screen route={route} accounts={accounts} />
         </Suspense>
       </main>
       {!onTutorPage && !tutor.open && (
