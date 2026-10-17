@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { COURSE, LESSONS } from '../../course/course.ts';
+import { COURSE, LESSON_BY_ID, LESSONS } from '../../course/course.ts';
 import type { Lesson } from '../../course/types.ts';
 import { ElementTile, type TileState } from '../components/ElementTile.tsx';
+import { BoltIcon } from '../components/Icons.tsx';
 import { navigate } from '../router.ts';
-import { useProgress } from '../store.ts';
+import { type Progress, dueLessons, nextReviewIn, useProgress } from '../store.ts';
 
 const ROW = 112;
 const SWING = 64;
@@ -27,12 +28,14 @@ export function PathScreen() {
       <header className="track-head">
         <h1>Química orgânica</h1>
         <p>
-          Do carbono à isomeria, no ritmo do ENEM. {doneCount} de {playable.length} lições concluídas.
+          Do carbono às proteínas, no ritmo do ENEM. {doneCount} de {playable.length} lições concluídas.
         </p>
         <div className="track-meter" role="progressbar" aria-valuemin={0} aria-valuemax={playable.length} aria-valuenow={doneCount}>
           <span style={{ width: `${(doneCount / playable.length) * 100}%` }} />
         </div>
       </header>
+
+      <ReviewCard progress={progress} />
 
       {COURSE.map((unit) => (
         <section key={unit.id} className="unit" aria-labelledby={`unit-${unit.id}`}>
@@ -46,6 +49,35 @@ export function PathScreen() {
 
       {open && <LessonSheet lesson={open} state={stateOf(open)} onClose={() => setOpen(null)} />}
     </div>
+  );
+}
+
+/** Spaced review: lessons come back after 1, 2, 4, 8 and 16 days, sooner when they went badly. */
+function ReviewCard({ progress }: { progress: Progress }) {
+  const due = dueLessons(progress);
+  const wait = nextReviewIn(progress);
+  if (wait === undefined) return null;
+  if (!due.length) {
+    return (
+      <p className="review-card review-card--idle">
+        Revisão em dia: a próxima lição volta {wait <= 1 ? 'amanhã' : `em ${wait} dias`}.
+      </p>
+    );
+  }
+  const titles = due.slice(0, 4).map((d) => LESSON_BY_ID[d.id]?.title).filter(Boolean);
+  return (
+    <section className="review-card" aria-labelledby="review-title">
+      <div>
+        <h2 id="review-title">Revisão do dia</h2>
+        <p>
+          {titles.join(' · ')}
+          {due.length > 4 ? ` e mais ${due.length - 4}` : ''}
+        </p>
+      </div>
+      <button type="button" className="btn btn--primary" onClick={() => navigate({ name: 'review' })}>
+        <BoltIcon /> Revisar
+      </button>
+    </section>
   );
 }
 
@@ -119,6 +151,11 @@ function LessonSheet({ lesson, state, onClose }: { lesson: Lesson; state: TileSt
         {state === 'locked' && (
           <button type="button" className="btn btn--primary" onClick={start} autoFocus>
             Fazer mesmo assim
+          </button>
+        )}
+        {!!lesson.theory?.length && state !== 'soon' && (
+          <button type="button" className="btn" onClick={() => navigate({ name: 'theory', id: lesson.id })}>
+            Ver teoria
           </button>
         )}
         <button type="button" className="btn btn--quiet" onClick={onClose} autoFocus={state === 'soon'}>
