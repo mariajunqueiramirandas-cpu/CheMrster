@@ -25,7 +25,7 @@ import {
 } from './geometry.ts';
 import { FONT_METRICS, advance } from './font.ts';
 import { type AtomLabel, type LabelSpec, chooseHydrogenSide, clipParam, layoutLabel } from './labels.ts';
-import { computeLayout } from './layout.ts';
+import { computeLayout, polymerEnds } from './layout.ts';
 import { Molecule } from './molecule.ts';
 import { perceive } from './perception.ts';
 import { ringInfo } from './rings.ts';
@@ -122,6 +122,11 @@ export interface DepictOptions {
   /** Wedge/hash bonds from @/@@ (default true). */
   stereo?: boolean;
   highlights?: Highlight[];
+  /**
+   * The input is a polymer repeat unit whose two open ends are `*` atoms (PVC: `*CC(*)Cl`):
+   * the chain lies flat and its end bonds cross square brackets, with n after the closing one.
+   */
+  polymer?: boolean;
 }
 
 export interface LinePrim {
@@ -244,12 +249,12 @@ export function depict(input: string | Molecule, options: DepictOptions = {}): D
   let coords: Vec[];
   if (formula === 'structural') {
     mol = expandHydrogens(mol);
-    coords = computeLayout(mol, { rotationStep: 90 });
+    coords = computeLayout(mol, { rotationStep: 90, polymer: options.polymer });
   } else if (formula === 'condensed') {
     // Lay out as a full structural formula (straight chains, 90° branches), then fold
     // the hydrogens back into the carbon labels.
     const full = expandHydrogens(mol);
-    coords = computeLayout(full, { rotationStep: 90, ignoreHydrogenClashes: true })
+    coords = computeLayout(full, { rotationStep: 90, ignoreHydrogenClashes: true, polymer: options.polymer })
       .slice(0, mol.atoms.length)
       .map((p) => scale(p, CONDENSED_STRETCH));
   } else if (formula === 'plana') {
@@ -257,7 +262,7 @@ export function depict(input: string | Molecule, options: DepictOptions = {}): D
     // backbone carbons written as C with every bond, hydrogens included, drawn.
     const reduced = abbreviate(mol, options.abbreviations ?? ALL_ABBREVIATIONS);
     const full = expandHydrogens(reduced);
-    const all = computeLayout(full, { rotationStep: 90, chain: 'functional', ignoreHydrogenClashes: true });
+    const all = computeLayout(full, { rotationStep: 90, chain: 'functional', ignoreHydrogenClashes: true, polymer: options.polymer });
     const n = reduced.atoms.length;
     const backbone = (i: number) => {
       const a = reduced.atoms[i];
@@ -274,7 +279,7 @@ export function depict(input: string | Molecule, options: DepictOptions = {}): D
       const before = mol;
       mol = addHydrogens(before, (i) => wantsExplicitH(before, i, conv));
     }
-    coords = computeLayout(mol, { pose: conv.pose, writtenOut: false });
+    coords = computeLayout(mol, { pose: conv.pose, writtenOut: false, polymer: options.polymer });
   }
   if (conv.ionPairs) pairIons(mol, coords, style);
   const info = ringInfo(mol, mol.rings);
@@ -352,9 +357,13 @@ function draw(
     );
   };
 
+  // Open ends of a polymer repeat unit are drawn as bare bond stubs, not as R.
+  const ends = options.polymer ? polymerEnds(mol) : undefined;
+
   // ---- labels
   const labels: (AtomLabel | undefined)[] = mol.atoms.map(() => undefined);
   for (const atom of mol.atoms) {
+    if (ends?.includes(atom.index)) continue;
     const deg = mol.degree(atom.index);
     const isCarbon = atom.element === 'C';
     const show =
@@ -409,6 +418,8 @@ function draw(
 
   const prims: Primitive[] = [];
   const line = (a: Vec, b: Vec, bond: number) => prims.push({ type: 'line', a, b, width: lw, color: style.ink, bond });
+  const repeatMark = ends ? bracketUnit(mol, P, labels, ends, style) : undefined;
+  if (repeatMark) prims.push(...repeatMark.lines);
 
   /** Clip a stroke at labelled ends; returns undefined when nothing visible remains. */
   const clip = (a: Vec, b: Vec, atomA: number, atomB: number): [Vec, Vec] | undefined => {
@@ -661,7 +672,7 @@ function draw(
 
   // ---- annotations: dashed outline around each group, its name set in bold beside it
   const outlines: OutlinePrim[] = [];
-  const texts: FreeText[] = [];
+  const texts: FreeText[] = repeatMark ? [repeatMark.n] : [];
   const fs = style.fontSize * L;
   type Rect = { x1: number; y1: number; x2: number; y2: number };
   const overlaps = (a: Rect, b: Rect) => a.x1 < b.x2 && a.x2 > b.x1 && a.y1 < b.y2 && a.y2 > b.y1;
@@ -768,6 +779,74 @@ function draw(
     viewBox = bounds(P, prims, underlay, finalLabels, style, outlines, texts);
   }
   return { molecule: mol, style, viewBox, underlay, primitives: prims, labels: finalLabels, outlines, texts, atoms };
+}
+
+/**
+ * Brackets around a polymer repeat unit. Each end bond is stretched so that it crosses a
+ * vertical bracket clear of every atom and label of the unit and sticks out beyond it;
+ * the end atoms in `P` move accordingly. "n" sits after the foot of the closing bracket.
+ */
+function bracketUnit(
+  mol: Molecule,
+  P: Vec[],
+  labels: (AtomLabel | undefined)[],
+  ends: [number, number],
+  style: DrawStyle,
+): { lines: LinePrim[]; n: FreeText } | undefined {
+  const L = style.bondLength;
+  const lw = style.lineWidth * L;
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  const grow = (x: number, y: number) => {
+    minX = Math.min(minX, x);
+    maxX = Math.max(maxX, x);
+    minY = Math.min(minY, y);
+    maxY = Math.max(maxY, y);
+  };
+  for (const a of mol.atoms) {
+    if (ends.includes(a.index)) continue;
+    grow(P[a.index].x, P[a.index].y);
+    for (const box of labels[a.index]?.boxes ?? []) {
+      grow(box.x1, box.y1);
+      grow(box.x2, box.y2);
+    }
+  }
+  if (!Number.isFinite(minX)) return undefined;
+  const [left, right] = P[ends[0]].x <= P[ends[1]].x ? ends : [ends[1], ends[0]];
+  const crossings: Array<{ x: number; y: number; side: number }> = [];
+  for (const [end, side] of [
+    [left, -1],
+    [right, 1],
+  ] as const) {
+    const from = P[mol.neighbors(end)[0]];
+    let dir = norm(sub(P[end], from));
+    // A stub has to leave the unit sideways to cross a vertical bracket.
+    if (dir.x * side < 0.25) dir = vec(side, 0);
+    // The bracket stands clear of the unit, and at least half a bond out along the stub.
+    const clear = side < 0 ? minX - 0.4 * L : maxX + 0.4 * L;
+    const half = from.x + dir.x * 0.5 * L;
+    const x = side < 0 ? Math.min(clear, half) : Math.max(clear, half);
+    const t = (x - from.x) / dir.x;
+    P[end] = add(from, scale(dir, t + 0.42 * L));
+    crossings.push({ x, y: from.y + dir.y * t, side });
+  }
+  const top = Math.min(minY, ...crossings.map((c) => c.y)) - 0.24 * L;
+  const bottom = Math.max(maxY, ...crossings.map((c) => c.y)) + 0.24 * L;
+  const serif = 0.16 * L;
+  const lines: LinePrim[] = [];
+  const seg = (a: Vec, b: Vec) => lines.push({ type: 'line', a, b, width: lw, color: style.ink });
+  for (const { x, side } of crossings) {
+    // Serifs point inwards: "[" opens to the right, "]" to the left.
+    const inward = -side * serif;
+    seg(vec(x + inward, top), vec(x, top));
+    seg(vec(x, top), vec(x, bottom));
+    seg(vec(x, bottom), vec(x + inward, bottom));
+  }
+  const size = style.fontSize * L * style.subscriptScale * 1.1;
+  const n: FreeText = { text: 'n', x: crossings[1].x + 0.1 * L, y: bottom + 0.3 * size, size, weight: 400, anchor: 'start' };
+  return { lines, n };
 }
 
 /** Arial Bold runs about 8% wider than the regular metrics used for labels. */

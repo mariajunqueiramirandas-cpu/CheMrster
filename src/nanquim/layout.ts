@@ -53,6 +53,11 @@ export interface LayoutOptions {
    * run straight through 2-connected atoms. Default: detected from explicit H atoms.
    */
   writtenOut?: boolean;
+  /**
+   * The molecule is a polymer repeat unit whose two open ends are `*` atoms: the main
+   * chain runs from one end to the other and lies horizontal, side groups below.
+   */
+  polymer?: boolean;
 }
 
 export function computeLayout(mol: Molecule, options: LayoutOptions = {}): Vec[] {
@@ -60,13 +65,115 @@ export function computeLayout(mol: Molecule, options: LayoutOptions = {}): Vec[]
   const coords: Vec[] = mol.atoms.map(() => vec(0, 0));
   const components = mol.components();
   for (const comp of components) {
-    const placer = new ComponentPlacer(mol, info, comp, coords, options.chain ?? 'carbon', options.writtenOut);
+    const ends = options.polymer ? polymerEnds(mol, comp) : undefined;
+    const backbone = ends ? shortestPath(mol, ends[0], ends[1]) : undefined;
+    const placer = new ComponentPlacer(mol, info, comp, coords, options.chain ?? 'carbon', options.writtenOut, backbone);
     placer.run();
     refineOverlaps(mol, options.ignoreHydrogenClashes ? comp.filter((a) => mol.atoms[a].element !== 'H') : comp, coords, info);
-    orient(mol, comp, coords, info, options.rotationStep, options.pose ?? 'landscape');
+    orient(mol, comp, coords, info, options.rotationStep, options.pose ?? 'landscape', backbone);
+    if (backbone) levelEnds(mol, coords, backbone);
   }
   arrangeComponents(mol, components, coords);
   return coords;
+}
+
+/** The two open ends (`*` atoms with one bond) of a polymer repeat unit, in input order. */
+export function polymerEnds(mol: Molecule, atoms: number[] = mol.atoms.map((a) => a.index)): [number, number] | undefined {
+  const ends = atoms.filter((a) => mol.atoms[a].element === '*' && mol.degree(a) === 1);
+  return ends.length === 2 ? [ends[0], ends[1]] : undefined;
+}
+
+/**
+ * Turn each open end of a repeat unit straight out sideways, so it meets its vertical
+ * bracket at a right angle, unless that would crowd the other bonds of its atom.
+ */
+function levelEnds(mol: Molecule, coords: Vec[], backbone: number[]) {
+  const first = backbone[0];
+  const last = backbone[backbone.length - 1];
+  const stereoAtoms = new Set(mol.doubleBondStereo.flatMap((st) => [st.a, st.b, st.x, st.y]));
+  for (const end of [first, last]) {
+    const other = end === first ? last : first;
+    const side = coords[end].x <= coords[other].x ? -1 : 1;
+    const atom = mol.neighbors(end)[0];
+    const p = coords[atom];
+    const want = side < 0 ? Math.PI : 0;
+    const rest = mol.neighbors(atom).filter((x) => x !== end);
+    // Lone atoms (H, =O, CH3, Cl) may swing aside to make room; branches stay put.
+    const movable = rest.filter((x) => mol.degree(x) === 1 && !backbone.includes(x) && !stereoAtoms.has(x));
+    const fixed = rest.filter((x) => !movable.includes(x));
+    const clearance = (ids: number[]) =>
+      Math.min(Math.PI, ...ids.map((x) => Math.abs(wrapAngle(angleOf(sub(coords[x], p)) - want))));
+    if (clearance(rest) >= 80 * DEG) {
+      coords[end] = add(p, vec(side, 0));
+      continue;
+    }
+    if (clearance(fixed) < 100 * DEG && !swingBranches(mol, coords, atom, fixed, backbone, want)) continue;
+    coords[end] = add(p, vec(side, 0));
+    // Spread the lone atoms over the widest gap left between the stub and the branches.
+    const angles = [want, ...fixed.map((x) => angleOf(sub(coords[x], p)))].map((t) => (t + 2 * Math.PI) % (2 * Math.PI));
+    angles.sort((a, b) => a - b);
+    let gapStart = angles[angles.length - 1];
+    let gap = angles[0] + 2 * Math.PI - gapStart;
+    for (let i = 1; i < angles.length; i++) {
+      if (angles[i] - angles[i - 1] > gap) {
+        gapStart = angles[i - 1];
+        gap = angles[i] - angles[i - 1];
+      }
+    }
+    movable.forEach((x, k) => {
+      const d = Math.hypot(coords[x].x - p.x, coords[x].y - p.y) || 1;
+      coords[x] = add(p, fromAngle(gapStart + (gap * (k + 1)) / (movable.length + 1), d));
+    });
+  }
+}
+
+/**
+ * Turn the side branches of `atom` (rigidly, by 30° or 60°) until none lies within 80° of
+ * `want`, without crowding the drawing. Returns false, changing nothing, if that fails.
+ */
+function swingBranches(mol: Molecule, coords: Vec[], atom: number, fixed: number[], backbone: number[], want: number): boolean {
+  const side = fixed.filter((x) => !backbone.includes(x));
+  if (side.length !== fixed.length - 1 || side.length === 0 || side.length > 2) return false;
+  // Only true branches swing: a ring through `atom` would tear.
+  if (side.some((x) => sideOf(mol, x, atom).some((a) => backbone.includes(a)))) return false;
+  const p = coords[atom];
+  const comp = mol.components().find((c) => c.includes(atom))!;
+  const before = congestion(mol, comp, coords);
+  const saved = coords.map((c) => c);
+  const steps = [0, -30, 30, -60, 60].map((d) => d * DEG);
+  let best: { cost: number; turns: number[] } | undefined;
+  const turnsList = side.length === 1 ? steps.map((t) => [t]) : steps.flatMap((t) => steps.map((u) => [t, u]));
+  for (const turns of turnsList) {
+    side.forEach((x, k) => {
+      for (const a of sideOf(mol, x, atom)) coords[a] = add(p, rotate(sub(saved[a], p), turns[k]));
+    });
+    const clear = fixed.every((x) => Math.abs(wrapAngle(angleOf(sub(coords[x], p)) - want)) >= 80 * DEG);
+    const cost = congestion(mol, comp, coords) - before + turns.reduce((s, t) => s + Math.abs(t), 0) * 0.01;
+    if (clear && cost < 1 && (!best || cost < best.cost)) best = { cost, turns };
+    for (let a = 0; a < coords.length; a++) coords[a] = saved[a];
+  }
+  if (!best) return false;
+  side.forEach((x, k) => {
+    for (const a of sideOf(mol, x, atom)) coords[a] = add(p, rotate(sub(saved[a], p), best!.turns[k]));
+  });
+  return true;
+}
+
+/** Atoms on a shortest bond path from `from` to `to`, both included. */
+function shortestPath(mol: Molecule, from: number, to: number): number[] | undefined {
+  const prev = new Map<number, number>([[from, -1]]);
+  const q = [from];
+  for (let i = 0; i < q.length && !prev.has(to); i++) {
+    for (const w of mol.neighbors(q[i])) {
+      if (prev.has(w)) continue;
+      prev.set(w, q[i]);
+      q.push(w);
+    }
+  }
+  if (!prev.has(to)) return undefined;
+  const path: number[] = [];
+  for (let x = to; x !== -1; x = prev.get(x)!) path.push(x);
+  return path.reverse();
 }
 
 // ---------------------------------------------------------------------------
@@ -343,6 +450,9 @@ class ComponentPlacer {
   private readonly queue: number[] = [];
   private readonly explicitH: boolean;
   private readonly chain: 'carbon' | 'functional';
+  /** Polymer main chain from one open end to the other. */
+  private readonly backbone?: number[];
+  private readonly onBackbone?: Set<number>;
 
   constructor(
     mol: Molecule,
@@ -351,9 +461,12 @@ class ComponentPlacer {
     out: Vec[],
     chain: 'carbon' | 'functional',
     writtenOut?: boolean,
+    backbone?: number[],
   ) {
     this.mol = mol;
     this.chain = chain;
+    this.backbone = backbone;
+    this.onBackbone = backbone && new Set(backbone);
     this.explicitH = writtenOut ?? comp.some((a) => mol.atoms[a].element === 'H' && mol.degree(a) === 1);
     this.comp = comp;
     this.out = out;
@@ -372,7 +485,11 @@ class ComponentPlacer {
 
   run() {
     const { comp } = this;
-    if (this.systemLayouts.length) {
+    if (this.backbone) {
+      // A repeat unit is drawn from its first open end, so the chain runs end to end.
+      this.setPos(this.backbone[0], vec(0, 0));
+      this.queue.push(this.backbone[0]);
+    } else if (this.systemLayouts.length) {
       // Seed with the biggest ring system.
       let best = 0;
       this.systemLayouts.forEach((l, i) => {
@@ -482,7 +599,9 @@ class ComponentPlacer {
         }
       }
     }
-    return heavy === 0 ? 0 : depth * 1000 + heavy;
+    const weight = heavy === 0 ? 0 : depth * 1000 + heavy;
+    // The polymer main chain always continues the zig-zag (or the straight line).
+    return this.onBackbone?.has(child) ? weight + 1e9 : weight;
   }
 
   private isLinear(atom: number): boolean {
@@ -514,8 +633,12 @@ class ComponentPlacer {
 
     // Candidate assignments: arrays of angles aligned with `unplaced`.
     const candidates: number[][] = [];
+    /** Candidates from this index on are fallbacks, taken only when the others fail. */
+    let preferred = Infinity;
     if (placed.length === 0) {
-      if (n === 1) candidates.push([30 * DEG], [-30 * DEG]);
+      // Written-out repeat units start with a horizontal end bond: —CH₂—CH—.
+      if (this.backbone && atom === this.backbone[0] && this.explicitH) candidates.push([0]);
+      else if (n === 1) candidates.push([30 * DEG], [-30 * DEG]);
       else if (n === 2 && this.isLinear(atom)) candidates.push([0, Math.PI]);
       else if (n === 2) candidates.push([-30 * DEG, 210 * DEG]);
       else candidates.push(Array.from({ length: n }, (_, k) => (k * 2 * Math.PI) / n));
@@ -523,7 +646,18 @@ class ComponentPlacer {
     } else if (placed.length === 1) {
       const theta = angleOf(sub(here, this.pos[placed[0]]!));
       const s = this.turn[atom] || 1;
-      if (this.isLinear(atom) && n === 1) {
+      const inStereoBond = mol.doubleBondStereo.some((st) => st.a === atom || st.b === atom);
+      if (this.explicitH && n === 2 && !inStereoBond && this.onBackbone?.has(atom) && this.onBackbone.has(unplaced[0])) {
+        // Written-out chains run straight through C(=O) and the like, the C=O standing up.
+        const side = unplaced[1];
+        const carbonylO = mol.atoms[side].element === 'O' && mol.degree(side) === 1;
+        const first = carbonylO ? theta + 90 * DEG : theta - 90 * DEG;
+        const second = carbonylO ? theta - 90 * DEG : theta + 90 * DEG;
+        candidates.push([theta, first], [theta, second]);
+        preferred = candidates.length;
+        // Bent fallbacks, when a cis/trans requirement rules out the straight line.
+        candidates.push([theta - 60 * DEG * s, theta + 60 * DEG * s], [theta + 60 * DEG * s, theta - 60 * DEG * s]);
+      } else if (this.isLinear(atom) && n === 1) {
         candidates.push([theta]);
       } else if (n === 1) {
         candidates.push([theta - 60 * DEG * s], [theta + 60 * DEG * s]);
@@ -560,8 +694,9 @@ class ComponentPlacer {
     for (const cand of candidates) {
       const assign = new Map<number, Vec>();
       unplaced.forEach((c, i) => assign.set(c, add(here, fromAngle(cand[i]))));
-      let score = this.crowding(assign, atom);
+      let score = this.crowding(assign, atom) + this.spill(assign);
       if (!this.stereoOK(atom, assign)) score += 1e6;
+      if (candidates.indexOf(cand) >= preferred) score += 5;
       // Tiny bias keeps the preferred (first) candidate on ties.
       score += candidates.indexOf(cand) * 1e-6;
       if (score < bestScore - 1e-9) {
@@ -586,6 +721,47 @@ class ComponentPlacer {
       if (placed.length === 0) this.turn[child] = Math.sign(Math.sin(angle)) || 0;
       this.queue.push(child);
     });
+  }
+
+  /**
+   * How far side groups of a repeat unit reach past the ends of its main chain: the
+   * brackets have to clear them, so groups that stay between the ends draw tighter.
+   */
+  private spill(assign: Map<number, Vec>): number {
+    const chain = this.backbone;
+    if (!chain || chain.length < 4) return 0;
+    const at = (x: number) => assign.get(x) ?? this.pos[x];
+    const a = at(chain[1]);
+    const b = at(chain[chain.length - 2]);
+    if (!a || !b) return 0;
+    const axis = sub(b, a);
+    const length = Math.hypot(axis.x, axis.y);
+    if (length < 1e-6) return 0;
+    const u = scale(axis, 1 / length);
+    let out = 0;
+    for (const [child, p] of assign) {
+      if (this.onBackbone!.has(child) || this.mol.atoms[child].element === 'H') continue;
+      const t = (p.x - a.x) * u.x + (p.y - a.y) * u.y;
+      // Bigger branches spill further once they grow, so they weigh more.
+      out += (Math.max(0, -t) + Math.max(0, t - length)) * this.heavyBehind(child);
+    }
+    return out * 2;
+  }
+
+  /** Heavy atoms reached through `atom` away from what is already placed. */
+  private heavyBehind(atom: number): number {
+    const seen = new Set([atom]);
+    const q = [atom];
+    let n = 0;
+    for (let i = 0; i < q.length; i++) {
+      if (this.mol.atoms[q[i]].element !== 'H') n++;
+      for (const w of this.mol.neighbors(q[i])) {
+        if (seen.has(w) || this.pos[w]) continue;
+        seen.add(w);
+        q.push(w);
+      }
+    }
+    return n;
   }
 
   private crowding(assign: Map<number, Vec>, center: number): number {
@@ -828,9 +1004,10 @@ function orient(
   info: RingInfo,
   rotationStep?: number,
   pose: 'landscape' | 'upright' = 'landscape',
+  backbone?: number[],
 ) {
   if (comp.length < 2) return;
-  const upright = pose === 'upright' ? uprightBond(mol, comp, info) : undefined;
+  const upright = pose === 'upright' && !backbone ? uprightBond(mol, comp, info) : undefined;
   const carbonylOf = upright
     ? mol
         .neighbors(upright.bond[1])
@@ -874,7 +1051,16 @@ function orient(
   let bestKey: number[] | undefined;
   // Rings keep their textbook pose (vertical hexagon sides), so they turn in 60° steps;
   // open chains may also turn by 30° (e.g. to lay ethene or a triple bond flat).
-  const step = rotationStep ? (hasRings ? Math.max(rotationStep, 180) : rotationStep) : hasRings ? 60 : 30;
+  // A repeat unit turns freely on the 30° grid until its chain lies flat: a para-phenylene
+  // in the chain (PET, Kevlar) then rests on two vertices, as in print.
+  const step = backbone ? 30 : rotationStep ? (hasRings ? Math.max(rotationStep, 180) : rotationStep) : hasRings ? 60 : 30;
+  const polymer = backbone && {
+    first: index.get(backbone[0])!,
+    last: index.get(backbone[backbone.length - 1])!,
+    chain: backbone.map((a) => index.get(a)!),
+    // Side groups, not counting hydrogens and the C=O of the chain's esters and amides.
+    side: comp.map((a, i) => (!backbone.includes(a) && mol.atoms[a].element !== 'H' && !carbonylO[i] ? i : -1)).filter((i) => i >= 0),
+  };
   for (const mirror of [false, true]) {
     for (let k = 0; k < 360 / step; k++) {
       const pts = base.map((p) => rotate(mirror ? vec(-p.x, p.y) : p, k * step * DEG));
@@ -924,6 +1110,28 @@ function orient(
           const io = index.get(carbonylOf)!;
           if (pts[io].x < pts[ib].x - 1e-6) up += 1;
         }
+      }
+      if (polymer) {
+        // Ends level and in reading order, side groups hanging below the chain, C=O up.
+        const axis = sub(pts[polymer.last], pts[polymer.first]);
+        const tilt = Math.round(Math.abs(Math.atan2(axis.y, axis.x)) / DEG);
+        const chainY = polymer.chain.reduce((s, i) => s + pts[i].y, 0) / polymer.chain.length;
+        const below = polymer.side.reduce((s, i) => s + chainY - pts[i].y, 0);
+        const key = [-tilt, q(below), q(oy), onGrid];
+        let better = !bestKey;
+        if (bestKey) {
+          for (let i = 0; i < key.length; i++) {
+            if (key[i] !== bestKey[i]) {
+              better = key[i] > bestKey[i];
+              break;
+            }
+          }
+        }
+        if (better) {
+          bestKey = key;
+          best = pts;
+        }
+        continue;
       }
       const key = [
         up,

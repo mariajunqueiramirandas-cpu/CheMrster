@@ -24,6 +24,8 @@ export interface MoleculeViewProps {
   /** Bold name under the structure (and an optional source line). */
   caption?: string;
   source?: string;
+  /** A repeat unit: its two `*` atoms are open ends, drawn crossing brackets with n. */
+  polymer?: boolean;
   /** Draw the bonds in, one after another, like ink. */
   animate?: boolean;
   /** Atoms (of the parsed SMILES) that respond to taps. */
@@ -88,6 +90,7 @@ export const MoleculeView = memo(function MoleculeView({
   colored,
   caption,
   source,
+  polymer,
   animate,
   tappable,
   marks,
@@ -112,8 +115,9 @@ export const MoleculeView = memo(function MoleculeView({
       annotations: notes,
       caption,
       source,
+      polymer,
     });
-  }, [smiles, formula, size, look, outline, annotations, aromaticCircles, colored, caption, source]);
+  }, [smiles, formula, size, look, outline, annotations, aromaticCircles, colored, caption, source, polymer]);
   const order = useMemo(() => (animate ? inkOrder(drawing) : undefined), [drawing, animate]);
   const { viewBox: vb } = drawing;
   const L = drawing.style.bondLength;
