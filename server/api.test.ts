@@ -1,16 +1,16 @@
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { DEFAULT_LIMITS, PLUS_FEATURE, createApi, dayIn } from './api.ts';
+import { DEFAULT_LIMITS, createApi, dayIn } from './api.ts';
 import type { Authenticate } from './auth.ts';
 import { memoryDatabase } from './db.ts';
 
 const realFetch = globalThis.fetch;
 
-/** Signs in whoever sends `authorization: Bearer <user>`; `plus-*` users have the Pro feature. */
+/** Signs in whoever sends `authorization: Bearer <user>`. */
 const fakeAuth: Authenticate = async (req) => {
   const user = /^Bearer (\S+)$/.exec(req.headers.authorization ?? '')?.[1];
-  return user ? { userId: user, hasFeature: (f) => f === PLUS_FEATURE && user.startsWith('plus-') } : null;
+  return user ? { userId: user } : null;
 };
 
 async function serve(opts: { auth?: Authenticate; anthropicKey?: string; free?: number } = {}) {
@@ -44,11 +44,11 @@ afterEach(() => vi.unstubAllGlobals());
 describe('config and health', () => {
   it('hands the browser the publishable key only when accounts are on', async () => {
     const on = await serve();
-    expect(await (await on.call('/api/config')).json()).toEqual({ clerkPublishableKey: 'pk_test_x' });
+    expect(await (await on.call('/api/config')).json()).toEqual({ clerkPublishableKey: 'pk_test_x', billing: null });
     expect(await (await on.call('/api/health')).json()).toEqual({ ok: true });
     await on.close();
     const off = await serve({ auth: undefined });
-    expect(await (await off.call('/api/config')).json()).toEqual({ clerkPublishableKey: null });
+    expect(await (await off.call('/api/config')).json()).toEqual({ clerkPublishableKey: null, billing: null });
     expect((await off.call('/api/state')).status).toBe(404);
     await off.close();
   });
@@ -150,7 +150,8 @@ describe('tutor allowance', () => {
     expect(((await over.json()) as { error: { type: string } }).error.type).toBe('quota_exceeded');
     expect(upstream).toHaveBeenCalledTimes(2);
     expect(await (await s.call('/api/anthropic/status', { user: 'ana' })).json()).toEqual({ available: true, plan: 'free', limit: 2, used: 3 });
-    // Pro learners have their own, larger allowance.
+    // Pro learners (an authorized Mercado Pago subscription) have their own, larger allowance.
+    await s.db.saveSubscription({ userId: 'plus-bia', id: 'pre1', status: 'authorized', payerEmail: null, amount: 19.9, initPoint: null, nextPaymentDate: null, paidUntil: null });
     expect(await (await s.call('/api/anthropic/status', { user: 'plus-bia' })).json()).toEqual({ available: true, plan: 'plus', limit: 5, used: 0 });
     expect((await s.call('/api/anthropic/v1/messages', { user: 'plus-bia', ...message() })).status).toBe(200);
     await s.close();

@@ -2,11 +2,17 @@
 import { type ApiOptions, DEFAULT_LIMITS, createApi } from './api.ts';
 import type { Middleware } from './anthropic-proxy.ts';
 import { clerkAuth } from './auth.ts';
+import { createBilling } from './billing.ts';
 import { type Database, memoryDatabase, postgresDatabase } from './db.ts';
 
 type Env = Record<string, string | undefined>;
 
 const list = (v: string | undefined) => (v ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+/** Pro's monthly price in reais, with cents. */
+const price = (v: string | undefined) => {
+  const n = Number((v ?? '').replace(',', '.'));
+  return Number.isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : 19.9;
+};
 const int = (v: string | undefined, fallback: number) => (v && Number.isFinite(Number(v)) ? Math.max(0, Math.floor(Number(v))) : fallback);
 
 /** The origins the app is served from: APP_URL plus any in APP_ORIGINS. */
@@ -52,6 +58,15 @@ export async function apiFromEnv(env: Env, { checkHosts = true } = {}): Promise<
       : undefined,
     publishableKey,
     webhookSecret: env.CLERK_WEBHOOK_SIGNING_SECRET || undefined,
+    billing: env.MERCADO_PAGO_ACCESS_TOKEN
+      ? createBilling(db, {
+          accessToken: env.MERCADO_PAGO_ACCESS_TOKEN,
+          webhookSecret: env.MERCADO_PAGO_WEBHOOK_SECRET || undefined,
+          price: price(env.PRO_PRICE_BRL),
+          reason: env.PRO_REASON || 'CheMrster Pro',
+          appUrl: origins[0] ?? 'http://localhost:5173',
+        })
+      : undefined,
     anthropicKey: env.ANTHROPIC_API_KEY || undefined,
     allowedHosts: checkHosts ? allowedHosts(env) : undefined,
     limits: {

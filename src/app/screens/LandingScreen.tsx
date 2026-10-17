@@ -1,7 +1,9 @@
 /** What a signed-out visitor sees: what CheMrster is, the plans, and the way in. */
-import { PricingTable, SignInButton, SignUpButton } from '@clerk/react';
+import { SignInButton, SignUpButton } from '@clerk/react';
+import { usePlanOffer } from '../account.ts';
 import { BoardIcon, ChainIcon, ChartIcon, MapIcon, PathIcon, TutorIcon } from '../components/Icons.tsx';
 import { MoleculeView } from '../components/MoleculeView.tsx';
+import { PlanCards } from '../components/PlanCards.tsx';
 
 const FEATURES = [
   { icon: PathIcon, title: 'Trilha do zero ao herói', text: 'Vinte lições curtas, do carbono às biomoléculas, com teoria antes da prática e questões novas a cada vez.' },
@@ -13,6 +15,7 @@ const FEATURES = [
 ];
 
 export function LandingScreen() {
+  const offer = usePlanOffer();
   return (
     <div className="landing">
       <header className="landing-bar">
@@ -68,7 +71,23 @@ export function LandingScreen() {
         <section className="landing-pricing" aria-labelledby="landing-plans">
           <h2 id="landing-plans">Planos</h2>
           <p className="landing-lead">A trilha inteira é grátis. O Pro dá muito mais conversa com o tutor de IA, todo dia.</p>
-          <PricingTable newSubscriptionRedirectUrl="/#/planos" />
+          <PlanCards
+            offer={offer}
+            free={
+              <SignUpButton mode="modal">
+                <button type="button" className="btn btn--wide">
+                  Começar de graça
+                </button>
+              </SignUpButton>
+            }
+            plus={
+              <SignUpButton mode="modal" forceRedirectUrl="/#/planos">
+                <button type="button" className="btn btn--primary btn--wide">
+                  Criar conta e assinar
+                </button>
+              </SignUpButton>
+            }
+          />
         </section>
       </main>
 

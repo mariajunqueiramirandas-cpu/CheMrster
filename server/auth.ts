@@ -4,8 +4,6 @@ import { createClerkClient } from '@clerk/backend';
 
 export interface Viewer {
   userId: string;
-  /** Whether the user's plan includes a billing feature (from the session token, no extra request). */
-  hasFeature(slug: string): boolean;
 }
 
 export type Authenticate = (req: IncomingMessage) => Promise<Viewer | null>;
@@ -36,8 +34,7 @@ export function clerkAuth({ secretKey, publishableKey, authorizedParties, jwtKey
     try {
       const state = await clerk.authenticateRequest(toFetchRequest(req), { authorizedParties, jwtKey, acceptsToken: 'session_token' });
       if (!state.isAuthenticated) return null;
-      const auth = state.toAuth();
-      return { userId: auth.userId, hasFeature: (slug) => auth.has({ feature: slug }) };
+      return { userId: state.toAuth().userId };
     } catch (err) {
       console.error('Clerk:', err instanceof Error ? err.message : err);
       return null;

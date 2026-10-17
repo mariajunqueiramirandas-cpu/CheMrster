@@ -1,22 +1,25 @@
 /**
  * The SaaS side of the server, shared by the production server and `npm run dev`:
  *
- *   GET    /api/config              what the browser needs to start (Clerk's publishable key)
+ *   GET    /api/config              what the browser needs to start (Clerk's publishable key, Pro's price)
  *   GET    /api/health              liveness and database check, for the container
  *   GET    /api/state               the signed-in learner's saved app state
  *   PUT    /api/state               saves it, if nobody else saved since ({ baseRev, data })
  *   DELETE /api/state               deletes it
+ *   GET    /api/billing             the learner's plan and Mercado Pago subscription
+ *   POST   /api/billing/checkout    starts a subscription to Pro ({ payerEmail }) → { url } to pay on Mercado Pago
+ *   POST   /api/billing/sync        reads the subscription back from Mercado Pago ({ preapprovalId? })
+ *   POST   /api/billing/cancel      cancels it (Pro lasts until the end of the month paid for)
  *   POST   /api/webhooks/clerk      Clerk events: a deleted user's data is deleted too
+ *   POST   /api/webhooks/mercadopago  Mercado Pago events: subscriptions and their monthly charges
  *   *      /api/anthropic/...       the tutor proxy, for signed-in learners within their daily allowance
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { verifyWebhook } from '@clerk/backend/webhooks';
 import { type Gate, type Middleware, type Refusal, anthropicProxy, apiError, hostName, json, readBody, refuse, sameOrigin } from './anthropic-proxy.ts';
-import { type Authenticate, type Viewer, toFetchRequest } from './auth.ts';
+import { type Authenticate, toFetchRequest } from './auth.ts';
+import { type Billing, BillingError, planOf } from './billing.ts';
 import type { Database } from './db.ts';
-
-/** The billing feature (Clerk Billing, on the Pro plan) that raises the tutor's daily allowance. */
-export const PLUS_FEATURE = 'tutor_ia_plus';
 
 export interface TutorLimits {
   /** Requests a day (one tutor answer can take a few, when it uses tools). */
@@ -35,6 +38,8 @@ export interface ApiOptions {
   auth?: Authenticate;
   publishableKey?: string;
   webhookSecret?: string;
+  /** Pro through Mercado Pago; without it, everyone is on the free plan. */
+  billing?: Billing;
   anthropicKey?: string;
   allowedHosts?: string[];
   limits: TutorLimits;
@@ -58,12 +63,13 @@ export function dayIn(timeZone: string, at = new Date()): string {
 const SIGN_IN: Refusal = { status: 401, type: 'session_required', message: 'Entre na sua conta para usar o tutor com IA.' };
 
 export function tutorGate(db: Database, auth: Authenticate, limits: TutorLimits): Gate {
-  const allowance = (v: Viewer) => (v.hasFeature(PLUS_FEATURE) ? { plan: 'plus', limit: limits.plus } : { plan: 'free', limit: limits.free });
+  const allowance = async (userId: string) =>
+    planOf(await db.getSubscription(userId)) === 'plus' ? { plan: 'plus', limit: limits.plus } : { plan: 'free', limit: limits.free };
   return {
     async status(req) {
       const viewer = await auth(req);
       if (!viewer) return SIGN_IN;
-      const { plan, limit } = allowance(viewer);
+      const { plan, limit } = await allowance(viewer.userId);
       return { plan, limit, used: await db.tutorRequests(viewer.userId, dayIn(limits.timeZone)) };
     },
     async admit(req, body) {
@@ -75,7 +81,7 @@ export function tutorGate(db: Database, auth: Authenticate, limits: TutorLimits)
       if (typeof body.max_tokens !== 'number' || body.max_tokens > limits.maxTokens) {
         return { status: 400, type: 'invalid_request_error', message: `max_tokens acima do limite do servidor (${limits.maxTokens}).` };
       }
-      const { plan, limit } = allowance(viewer);
+      const { plan, limit } = await allowance(viewer.userId);
       const used = await db.countTutorRequest(viewer.userId, dayIn(limits.timeZone));
       if (used > limit) {
         return {
@@ -96,7 +102,10 @@ export function createApi(o: ApiOptions): Middleware {
   const proxy = anthropicProxy(o.anthropicKey, { allowedHosts: o.allowedHosts, gate: o.auth ? tutorGate(o.db, o.auth, o.limits) : undefined });
   const route = async (req: IncomingMessage, res: ServerResponse, path: string): Promise<void> => {
     if (path === '/api/config' && req.method === 'GET') {
-      return json(res, 200, { clerkPublishableKey: o.auth ? (o.publishableKey ?? null) : null });
+      return json(res, 200, {
+        clerkPublishableKey: o.auth ? (o.publishableKey ?? null) : null,
+        billing: o.auth && o.billing ? { price: o.billing.price, currency: 'BRL', limits: { free: o.limits.free, plus: o.limits.plus } } : null,
+      });
     }
     if (path === '/api/health') {
       try {
@@ -107,7 +116,9 @@ export function createApi(o: ApiOptions): Middleware {
       }
     }
     if (path === '/api/webhooks/clerk' && req.method === 'POST') return webhook(req, res);
+    if (path === '/api/webhooks/mercadopago' && req.method === 'POST') return mercadoPago(req, res);
     if (path === '/api/state') return state(req, res);
+    if (path === '/api/billing' || path.startsWith('/api/billing/')) return billing(req, res, path);
     return json(res, 404, apiError('not_found_error', 'Rota não disponível.'));
   };
 
@@ -151,6 +162,77 @@ export function createApi(o: ApiOptions): Middleware {
       return json(res, 400, apiError('invalid_request_error', 'Assinatura inválida.'));
     }
     if (event.type === 'user.deleted' && event.data.id) await o.db.deleteUser(event.data.id);
+    return json(res, 200, { received: true });
+  };
+
+  const billing = async (req: IncomingMessage, res: ServerResponse, path: string) => {
+    if (!o.auth) return json(res, 404, apiError('not_found_error', 'Contas não estão ligadas neste servidor.'));
+    if (!sameOrigin(req)) return json(res, 403, apiError('permission_error', 'Origem não permitida.'));
+    const viewer = await o.auth(req);
+    if (!viewer) return refuse(res, SIGN_IN);
+    const view = (s: Awaited<ReturnType<Billing['status']>>) => ({
+      enabled: Boolean(o.billing),
+      price: o.billing?.price ?? null,
+      plan: s.plan,
+      subscription: s.subscription && {
+        status: s.subscription.status,
+        payerEmail: s.subscription.payerEmail,
+        amount: s.subscription.amount,
+        nextPaymentDate: s.subscription.nextPaymentDate,
+        paidUntil: s.subscription.paidUntil,
+      },
+    });
+    if (path === '/api/billing' && req.method === 'GET') {
+      return json(res, 200, view(o.billing ? await o.billing.status(viewer.userId) : { plan: 'free', subscription: null }));
+    }
+    if (req.method !== 'POST') return json(res, 405, apiError('invalid_request_error', 'Método não permitido.'));
+    if (!o.billing) return json(res, 404, apiError('not_found_error', 'Pagamentos não estão ligados neste servidor.'));
+    let body: Record<string, unknown> = {};
+    try {
+      const raw = (await readBody(req, 16 * 1024)).toString('utf8');
+      if (raw) body = JSON.parse(raw);
+    } catch {
+      return json(res, 400, apiError('invalid_request_error', 'JSON inválido.'));
+    }
+    try {
+      if (path === '/api/billing/checkout') {
+        const email = typeof body.payerEmail === 'string' ? body.payerEmail.trim().toLowerCase() : '';
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
+          return json(res, 400, apiError('invalid_request_error', 'Informe o e-mail da sua conta do Mercado Pago.'));
+        }
+        return json(res, 200, { url: await o.billing.checkout(viewer.userId, email) });
+      }
+      if (path === '/api/billing/sync') {
+        const id = typeof body.preapprovalId === 'string' && /^[A-Za-z0-9]{1,64}$/.test(body.preapprovalId) ? body.preapprovalId : undefined;
+        return json(res, 200, view(await o.billing.sync(viewer.userId, id)));
+      }
+      if (path === '/api/billing/cancel') return json(res, 200, view(await o.billing.cancel(viewer.userId)));
+    } catch (err) {
+      if (err instanceof BillingError) return json(res, err.status, apiError('billing_error', err.message));
+      throw err;
+    }
+    return json(res, 404, apiError('not_found_error', 'Rota não disponível.'));
+  };
+
+  const mercadoPago = async (req: IncomingMessage, res: ServerResponse) => {
+    if (!o.billing) return json(res, 404, apiError('not_found_error', 'Pagamentos não estão ligados neste servidor.'));
+    let body: unknown = {};
+    try {
+      const raw = (await readBody(req, 64 * 1024)).toString('utf8');
+      if (raw) body = JSON.parse(raw);
+    } catch {
+      return json(res, 400, apiError('invalid_request_error', 'JSON inválido.'));
+    }
+    const header = (name: string) => (typeof req.headers[name] === 'string' ? (req.headers[name] as string) : undefined);
+    try {
+      await o.billing.notify(new URL(req.url ?? '/', 'http://x').searchParams, body, { signature: header('x-signature'), requestId: header('x-request-id') });
+    } catch (err) {
+      if (!(err instanceof BillingError)) throw err;
+      // Mercado Pago retries anything but a 2xx: worth it when its API could not be reached, not for
+      // a bad signature (refused) or an id its API does not know (nothing to retry).
+      if (err.status === 401 || err.status >= 500) return json(res, err.status, apiError('billing_error', err.message));
+      return json(res, 200, { received: true, ignored: err.message });
+    }
     return json(res, 200, { received: true });
   };
 

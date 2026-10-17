@@ -8,9 +8,12 @@ import { ptBR } from '@clerk/localizations';
 import { useEffect, useRef, useState } from 'react';
 import { App } from './App.tsx';
 import { setTokenSource } from './account.ts';
+import { syncBilling } from './billing.ts';
 import { startSync } from './cloud-sync.ts';
+import { href } from './router.ts';
 import { LandingScreen } from './screens/LandingScreen.tsx';
 import { settingsStore, updateSettings } from './settings.ts';
+import { toast } from './toast.ts';
 
 export function SaasRoot({ publishableKey }: { publishableKey: string }) {
   return (
@@ -43,6 +46,17 @@ function Gate() {
       void sync.flush().finally(() => sync.stop());
     };
   }, [userId]);
+
+  // Back from paying on Mercado Pago (back_url ?assinatura=retorno&preapproval_id=...): read the subscription, show Planos.
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (!readyFor || !params.has('assinatura')) return;
+    history.replaceState(null, '', `/${href({ name: 'plans' })}`);
+    window.dispatchEvent(new HashChangeEvent('hashchange'));
+    syncBilling(params.get('preapproval_id') ?? undefined)
+      .then((view) => toast(view.plan === 'plus' ? 'Pro ativo. Bons estudos!' : 'Assim que o Mercado Pago confirmar o pagamento, o Pro é ativado.'))
+      .catch((err: Error) => toast(err.message));
+  }, [readyFor]);
 
   // The tutor calls the learner by name: take it from the account when none was set.
   useEffect(() => {

@@ -10,13 +10,31 @@ export interface SavedState {
   updatedAt: string;
 }
 
+/** A learner's Mercado Pago subscription to Pro (see billing.ts). */
+export interface Subscription {
+  userId: string;
+  /** Mercado Pago's preapproval id. */
+  id: string;
+  /** pending, authorized, paused or cancelled. */
+  status: string;
+  payerEmail: string | null;
+  amount: number;
+  /** The checkout page, while pending. */
+  initPoint: string | null;
+  nextPaymentDate: string | null;
+  /** Pro lasts until here even if the subscription is cancelled. */
+  paidUntil: string | null;
+}
+
 export type PutResult = { ok: true; rev: number } | { ok: false; current: SavedState | null };
 
 export interface Database {
   getState(userId: string): Promise<SavedState | null>;
   /** Saves only when `baseRev` is the stored revision (0 for none), so two devices never overwrite each other blindly. */
   putState(userId: string, baseRev: number, data: unknown): Promise<PutResult>;
-  /** Forgets everything about a user: their state and their usage. */
+  getSubscription(userId: string): Promise<Subscription | null>;
+  saveSubscription(sub: Subscription): Promise<void>;
+  /** Forgets everything about a user: their state and their usage (not their subscription, a payment record). */
   deleteUser(userId: string): Promise<void>;
   /** Counts one tutor request on `day` and returns the day's total. */
   countTutorRequest(userId: string, day: string): Promise<number>;
@@ -28,7 +46,10 @@ export interface Database {
 export function memoryDatabase(): Database {
   const states = new Map<string, SavedState>();
   const usage = new Map<string, number>();
+  const subscriptions = new Map<string, Subscription>();
   return {
+    getSubscription: async (userId) => subscriptions.get(userId) ?? null,
+    saveSubscription: async (sub) => void subscriptions.set(sub.userId, { ...sub }),
     getState: async (userId) => states.get(userId) ?? null,
     async putState(userId, baseRev, data) {
       const current = states.get(userId) ?? null;
@@ -67,6 +88,17 @@ const MIGRATIONS = [
      requests integer NOT NULL DEFAULT 0,
      PRIMARY KEY (user_id, day)
    )`,
+  `CREATE TABLE IF NOT EXISTS subscriptions (
+     user_id           text PRIMARY KEY,
+     preapproval_id    text NOT NULL,
+     status            text NOT NULL,
+     payer_email       text,
+     amount            numeric(10, 2) NOT NULL,
+     init_point        text,
+     next_payment_date timestamptz,
+     paid_until        timestamptz,
+     updated_at        timestamptz NOT NULL DEFAULT now()
+   )`,
 ];
 
 export async function postgresDatabase(url: string): Promise<Database> {
@@ -84,6 +116,39 @@ export async function postgresDatabase(url: string): Promise<Database> {
 
   return {
     getState,
+    async getSubscription(userId) {
+      const { rows } = await pool.query<{
+        preapproval_id: string;
+        status: string;
+        payer_email: string | null;
+        amount: string;
+        init_point: string | null;
+        next_payment_date: Date | null;
+        paid_until: Date | null;
+      }>('SELECT preapproval_id, status, payer_email, amount, init_point, next_payment_date, paid_until FROM subscriptions WHERE user_id = $1', [userId]);
+      const r = rows[0];
+      return r
+        ? {
+            userId,
+            id: r.preapproval_id,
+            status: r.status,
+            payerEmail: r.payer_email,
+            amount: Number(r.amount),
+            initPoint: r.init_point,
+            nextPaymentDate: r.next_payment_date?.toISOString() ?? null,
+            paidUntil: r.paid_until?.toISOString() ?? null,
+          }
+        : null;
+    },
+    async saveSubscription(s) {
+      await pool.query(
+        `INSERT INTO subscriptions (user_id, preapproval_id, status, payer_email, amount, init_point, next_payment_date, paid_until, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())
+         ON CONFLICT (user_id) DO UPDATE SET preapproval_id = $2, status = $3, payer_email = $4, amount = $5, init_point = $6,
+           next_payment_date = $7, paid_until = $8, updated_at = now()`,
+        [s.userId, s.id, s.status, s.payerEmail, s.amount, s.initPoint, s.nextPaymentDate, s.paidUntil],
+      );
+    },
     async putState(userId, baseRev, data) {
       const json = JSON.stringify(data);
       const { rows } =
