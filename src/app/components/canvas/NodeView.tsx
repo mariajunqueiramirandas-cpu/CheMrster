@@ -79,9 +79,11 @@ export interface NodeViewProps {
   dy: number;
   onSave: (patch: Partial<MapNode>) => void;
   onStopEditing: () => void;
+  /** Keyboard focus selects the card, so Enter, arrows and Delete act on it. */
+  onFocus: (id: string) => void;
 }
 
-export const NodeView = memo(function NodeView({ node, selected, editing, dx, dy, onSave, onStopEditing }: NodeViewProps) {
+export const NodeView = memo(function NodeView({ node, selected, editing, dx, dy, onSave, onStopEditing, onFocus }: NodeViewProps) {
   const lesson = node.lessonId ? LESSON_BY_ID[node.lessonId] : undefined;
   const molOk = useMemo(() => validSmiles(node.smiles), [node.smiles]);
   return (
@@ -89,6 +91,9 @@ export const NodeView = memo(function NodeView({ node, selected, editing, dx, dy
       className={`node node--${node.kind} node--${node.color}${selected ? ' is-selected' : ''}${editing ? ' is-editing' : ''}`}
       data-node={node.id}
       style={{ transform: `translate(${node.x + dx}px, ${node.y + dy}px)`, width: node.w }}
+      tabIndex={editing ? -1 : 0}
+      aria-label={`${KIND_LABEL[node.kind]}: ${node.title || 'sem título'}`}
+      onFocus={(e) => e.target === e.currentTarget && onFocus(node.id)}
     >
       <p className="node-kicker">
         {lesson && (

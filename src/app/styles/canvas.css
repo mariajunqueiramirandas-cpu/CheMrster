@@ -133,6 +133,11 @@
   outline-offset: 3px;
 }
 
+.node:focus-visible {
+  outline: 3px solid var(--cobalt);
+  outline-offset: 3px;
+}
+
 .node.is-editing {
   outline-color: var(--cobalt);
   cursor: text;

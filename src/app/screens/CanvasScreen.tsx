@@ -436,6 +436,25 @@ export function CanvasScreen() {
     addNode({ kind: 'note', title: '' }, world(local(e)), true);
   };
 
+  const onNodeFocus = useCallback((id: string) => {
+    setSelected((s) => (s.includes(id) ? s : [id]));
+    setSelectedEdge(null);
+    // Focus scrolls the clipped surface to reveal the card; undo that and pan the view instead.
+    const el = surface.current;
+    if (el) {
+      el.scrollLeft = 0;
+      el.scrollTop = 0;
+    }
+    const n = canvasStore.get().nodes[id];
+    if (!n) return;
+    const v = viewRef.current;
+    const a = { x: n.x * v.zoom + v.x, y: n.y * v.zoom + v.y };
+    const b = { x: (n.x + n.w) * v.zoom + v.x, y: (n.y + n.h) * v.zoom + v.y };
+    if (a.x < 0 || a.y < 0 || b.x > viewport.w || b.y > viewport.h) {
+      setViewState({ ...v, x: viewport.w / 2 - (n.x + n.w / 2) * v.zoom, y: viewport.h / 2 - (n.y + n.h / 2) * v.zoom });
+    }
+  }, []);
+
   const single = selected.length === 1 ? canvas.nodes[selected[0]] : undefined;
   const edge = selectedEdge ? canvas.edges[selectedEdge] : undefined;
   const grid = 24 * view.zoom * (view.zoom < 0.5 ? 4 : 1);
@@ -476,6 +495,7 @@ export function CanvasScreen() {
               dy={drag?.ids.includes(n.id) ? drag.dy : 0}
               onSave={(patch) => editCanvas((c) => updateNode(c, n.id, patch))}
               onStopEditing={() => setEditing(null)}
+              onFocus={onNodeFocus}
             />
           ))}
         </div>
