@@ -1,15 +1,23 @@
 # CheMrster
 
 ENEM chemistry from zero to hero: short, game-like lessons (pt-BR) where every
-structure is drawn the way it would look printed in a textbook or on the exam itself.
+structure is drawn the way it would look printed in a textbook or on the exam itself,
+with an AI tutor that checks its chemistry against the same engine that grades the
+exercises, a progress tracker, a study board and an infinite concept map.
 
 ```
 npm install
 npm run dev        # app at http://localhost:5173
-npm test           # 458 tests: parser, layout, drawing, ENEM parity, analysis, reactions, lessons, theory, review
+npm test           # 511 tests: drawing, chemistry, lessons, review, progress, board, canvas, tutor, proxy
 npm run build      # typecheck + production bundle
+npm run serve      # serve ./dist with the tutor's API proxy (after npm run build)
 npm run sheet      # render every gallery molecule to PNG contact sheets in ./out
 ```
+
+To turn on the AI tutor, either put `ANTHROPIC_API_KEY=sk-ant-...` in `.env.local` (or the
+environment) before `npm run dev` / `npm run serve`, so the key stays on the server, or paste
+a key in *Ajustes* inside the app, where it stays on that device. Without a key the tutor
+still works offline from the course's own content.
 
 ## What is in here
 
@@ -21,7 +29,10 @@ npm run sheet      # render every gallery molecule to PNG contact sheets in ./ou
 | `src/chem/reactions.ts` | The ENEM reactions as graph edits: additions (Markovnikov), substitution (alkanes, benzene directors), oxidation, combustion, esters, saponification, biodiesel, polymers, peptides, glycosides |
 | `src/course/` | The track: units, lessons, theory cards, seeded exercise generators, spaced review and the studio's reaction lab |
 | `src/content/molecules.ts` | ~75 molecules that keep showing up in ENEM questions |
-| `src/app/` | React app: the lesson path, theory and practice, daily review, and the *Estruturas* studio |
+| `src/tutor/` | The AI tutor: system prompt with the whole course, learner context, tools backed by the chemistry engine, the streaming tool-use loop, its markup, and the offline tutor |
+| `src/study/` | Learning models: mastery with a forgetting curve, the study calendar and review forecast, the kanban board, and the concept-map canvas with its geometry |
+| `server/anthropic-proxy.ts` | Forwards the Messages API to Anthropic with the server's key, for `dev`, `preview` and `serve` |
+| `src/app/` | React app: the lesson path, theory and practice, daily review, the *Estruturas* studio, the tutor, *Mapa*, *Quadro*, *Progresso* and *Ajustes* |
 
 ## Nanquim: structures that look printed
 
@@ -123,6 +134,71 @@ it (hydrogenation, Markovnikov additions, oxidation, esterification, saponificat
 nitration with the right director, polymerization, balanced combustion), with the computed
 product one tap away from the editor.
 
+## The tutor
+
+A tutor button sits on every screen (Ctrl/⌘ + K), and the tutor is woven into the course:
+**Dica** on a question gives a nudge without the answer, **Por que errei?** after a verdict
+explains the miss, **Explicar de outro jeito** re-explains a theory card, and the studio asks
+about the structure on screen. Each message carries what is on screen (the question and the
+learner's answer, the card, the molecule) and a snapshot of the learner's progress.
+
+With the Claude API (Claude Opus 5.5 by default; Sonnet 5.5 or Haiku 5.5 in *Ajustes*) the
+tutor streams its answers and uses tools that run in the browser:
+
+| Tool | What it does |
+| --- | --- |
+| `analisar_molecula` | Formula, molar mass, chain, functions, chiral carbons and cis/trans from `src/chem/analysis.ts` |
+| `reagir` | The ENEM reactions that apply to a structure, with products from `src/chem/reactions.ts` |
+| `propor_exercicio` | A fresh question from a lesson's generator, answered inside the chat and logged to progress |
+| `salvar_no_mapa` | A hub-and-spokes cluster of concept cards with labelled arrows on the map |
+| `planejar_tarefas` | Cards on the study board, linked to lessons where they match |
+
+So the tutor never has to guess a formula or a product. It writes structures as
+`<mol smiles="..."/>`, which the app draws ENEM-style, and links lessons as `[[licao:id]]`.
+The system prompt holds the whole course (outline and every theory card) and is prompt-cached;
+history is replayed exactly, including thinking blocks; tool inputs stream eagerly and are
+validated before anything runs; turns cut off by `max_tokens` or a refusal never run tools;
+server-side fallbacks are on for Opus and Sonnet. Created cards and tasks can be undone from
+the chat.
+
+Without a connection the **offline tutor** answers from the course: a missed question gets
+its key, explanation and the theory card behind it; a molecule (by name or SMILES) gets the
+engine's analysis; "me testa em…" gets a generated question; "monta um plano" fills the board;
+anything else is matched against the theory cards.
+
+## Progress
+
+Every answer is logged (lesson, format, first try or retry, time). A lesson's **mastery** is
+its recent first-try accuracy (smoothed while there is little evidence) times how much is
+still remembered, from the FSRS power-law forgetting curve with the Leitner box as stability:
+90% on the review date, fading slowly after. *Progresso* shows it as a main-group periodic
+table (H to Ca, one element per lesson) filled by a validated one-hue ramp, with unit bars, a
+study calendar against the daily goal, XP by day, the week's review forecast, weak spots and
+accuracy by question format; every chart has a table view and keyboard access.
+
+## Study board
+
+*Quadro* is a kanban (A estudar, Estudando with a soft limit of three, Revisar, Dominado).
+Cards drag with a mouse, with a finger after a long press, or with Alt + arrows, and open an
+editor with lesson link, due date, colour, notes and a checklist. Cards linked to a lesson move
+by themselves: after practice to *Dominado* or *Revisar*, and back to *Revisar* when the lesson
+comes due. *Lições da trilha* fills the board with due reviews and the next lessons; the tutor
+can plan a week on it.
+
+## Concept map
+
+*Mapa* is an infinite canvas of paper cards on a dotted notebook bench: notes, structures,
+theory cards from the course, tutor answers and saved questions (every theory card, studio
+structure, verdict and tutor reply has a *Salvar no mapa* button). Pan by dragging or with the
+wheel, zoom with Ctrl + wheel, a trackpad pinch or two fingers; select, marquee-select with
+Shift, move, duplicate, recolour; drag a selected card's dot onto another card to link them.
+Links are drawn like reaction arrows with the label written over them, as reagents are. Several
+maps, undo/redo, a minimap, and *Expandir* to let the tutor grow a card into a cluster.
+
+Everything a learner makes lives in `localStorage`; *Ajustes* exports and restores it as JSON
+(the API key is never included). If storage fills up, the oldest tutor conversations are
+dropped first so progress, board and map keep saving.
+
 ## Known limits
 
 - Bridged systems with substituents on the bridge (camphor, the N-methyl of cocaine) still
@@ -134,5 +210,7 @@ product one tap away from the editor.
   and lactose would look the same; only sucrose and maltose are used.
 - Full triglycerides with three long chains still lay out with one tail hanging down; the
   lessons draw them with R groups, as textbooks do.
-- No AI tutor yet. The analysis module, the reaction engine and the exercise format are the
-  seam for it: an LLM can explain a wrong answer using the same data the generator used.
+- Data stays on one device; there is no account or sync beyond the JSON backup.
+- `npm run serve` listens on 127.0.0.1 and answers only to localhost names. Serving others
+  (`HOST=0.0.0.0 ALLOWED_HOSTS=your.domain`) lets anyone who can open the page use the
+  server's API key: put it behind your own login first.

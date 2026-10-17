@@ -3,10 +3,12 @@ import { chiralCarbons, classifyChain, functionalGroups, molarMass } from '../..
 import { MOLECULES } from '../../content/molecules.ts';
 import { subscript } from '../../course/kit.ts';
 import { type Annotation, type FormulaKind, STYLES, moleculeFromSmiles, renderSVG } from '../../nanquim/index.ts';
-import { DownloadIcon, PrintIcon } from '../components/Icons.tsx';
+import { saveToMap } from '../canvas-store.ts';
+import { DownloadIcon, PinIcon, PrintIcon, TutorIcon } from '../components/Icons.tsx';
 import { type MoleculeLook, MoleculeView } from '../components/MoleculeView.tsx';
 import { ReactionLab } from '../components/ReactionLab.tsx';
 import { href } from '../router.ts';
+import { ask } from '../tutor-store.ts';
 
 const FORMULAS: Array<{ id: FormulaKind; label: string }> = [
   { id: 'skeletal', label: 'Bastão' },
@@ -176,6 +178,29 @@ export function StudioScreen({ initialSmiles }: { initialSmiles?: string }) {
           </button>
           <button type="button" className="btn" onClick={() => window.print()} disabled={!('mol' in parsed)}>
             <PrintIcon /> Imprimir
+          </button>
+          <button
+            type="button"
+            className="btn"
+            disabled={!('mol' in parsed)}
+            onClick={() => saveToMap({ kind: 'molecule', title: entry?.name ?? subscript(moleculeFromSmiles(smiles).formula()), smiles, text: entry?.note ?? '' })}
+          >
+            <PinIcon /> Salvar no mapa
+          </button>
+          <button
+            type="button"
+            className="btn btn--tutor"
+            disabled={!('mol' in parsed)}
+            onClick={() =>
+              ask({
+                text: `Me explica esta estrutura${entry ? ` (${entry.name})` : ''}: funções, cadeia e o que o ENEM costuma perguntar sobre ela.`,
+                screen: { kind: 'molecule', smiles, name: entry?.name },
+                about: `Estrutura: ${entry?.name ?? smiles}`,
+                open: true,
+              })
+            }
+          >
+            <TutorIcon /> Perguntar ao tutor
           </button>
         </div>
       </div>

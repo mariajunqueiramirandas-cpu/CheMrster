@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { type Progress, daysSince, dayKey, dueLessons, nextBox, nextReviewIn } from './store.ts';
+import { type Progress, daysSince, dayKey, dueLessons, nextBox, nextReviewIn, progressStore, recordLesson, withAttempt } from './store.ts';
 
 const day = (y: number, m: number, d: number, h = 12) => new Date(y, m - 1, d, h);
-const progress = (completed: Progress['completed']): Progress => ({ xp: 0, completed, streak: { count: 0, last: null } });
+const progress = (completed: Progress['completed']): Progress => ({ xp: 0, completed, streak: { count: 0, last: null }, days: {}, log: [] });
 
 describe('spaced review', () => {
   it('moves lessons between Leitner boxes', () => {
@@ -43,5 +43,16 @@ describe('spaced review', () => {
       weak: { best: 0.6, times: 1, last, box: 1 },
     });
     expect(dueLessons(p, now).map((x) => x.id)).toEqual(['weak', 'strong']);
+  });
+});
+
+describe('streak', () => {
+  it('keeps the record from data saved before records existed', () => {
+    const old: Progress = { xp: 50, completed: {}, streak: { count: 10, last: dayKey(day(2026, 9, 1)) }, days: {}, log: [] };
+    const after = withAttempt(old, { lesson: 'a', kind: 'choice', ok: true, ms: 1000, source: 'lesson' }, day(2026, 10, 17));
+    expect(after.streak).toEqual(old.streak);
+    progressStore.set(old);
+    recordLesson('tetravalencia', 1, 10, day(2026, 10, 17));
+    expect(progressStore.get().streak).toEqual({ count: 1, last: dayKey(day(2026, 10, 17)), best: 10 });
   });
 });

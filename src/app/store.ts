@@ -1,5 +1,6 @@
 /** Learner progress, kept in localStorage (per device) and shared through a tiny external store. */
-import { useSyncExternalStore } from 'react';
+import type { Exercise } from '../course/types.ts';
+import { persisted, usePersisted } from './persist.ts';
 
 export interface LessonRecord {
   /** Best accuracy so far, 0..1. */
@@ -11,50 +12,62 @@ export interface LessonRecord {
   box?: number;
 }
 
+export type AttemptSource = 'lesson' | 'review' | 'tutor';
+
+/** One answered question. */
+export interface Attempt {
+  /** When it was answered (epoch ms). */
+  t: number;
+  lesson: string;
+  kind: Exercise['kind'];
+  ok: boolean;
+  /** A missed question asked again at the end of the session: not a first try. */
+  retry?: boolean;
+  /** Time spent on it, capped so a question left open does not count as study. */
+  ms: number;
+  source: AttemptSource;
+}
+
+/** What happened on one calendar day. */
+export interface DayStats {
+  xp: number;
+  /** Every answer, retries included. */
+  answered: number;
+  firstTries: number;
+  firstRight: number;
+  /** Time on theory and questions. */
+  ms: number;
+}
+
 export interface Progress {
   xp: number;
   completed: Record<string, LessonRecord>;
-  streak: { count: number; last: string | null };
+  streak: { count: number; last: string | null; best?: number };
+  /** By dayKey. */
+  days: Record<string, DayStats>;
+  /** The latest answers, oldest first, capped at LOG_CAP. */
+  log: Attempt[];
 }
 
-const KEY = 'chemrster:progress:v1';
-const EMPTY: Progress = { xp: 0, completed: {}, streak: { count: 0, last: null } };
+export const LOG_CAP = 2000;
+/** Longest stretch one question or theory card can add to study time. */
+export const MAX_STEP_MS = 120_000;
 
-function load(): Progress {
-  try {
-    const raw = localStorage.getItem(KEY);
-    if (raw) return { ...EMPTY, ...JSON.parse(raw) };
-  } catch {
-    // Private mode or blocked storage: start fresh in memory.
-  }
-  return EMPTY;
-}
+const EMPTY: Progress = { xp: 0, completed: {}, streak: { count: 0, last: null }, days: {}, log: [] };
 
-let state: Progress = load();
-const listeners = new Set<() => void>();
+const store = persisted<Progress>('chemrster:progress:v1', (stored) =>
+  stored && typeof stored === 'object' ? { ...EMPTY, ...(stored as Partial<Progress>) } : EMPTY,
+);
 
-function save(next: Progress) {
-  state = next;
-  try {
-    localStorage.setItem(KEY, JSON.stringify(next));
-  } catch {
-    // Keep working in memory.
-  }
-  for (const l of listeners) l();
-}
-
-const subscribe = (l: () => void) => {
-  listeners.add(l);
-  return () => listeners.delete(l);
-};
+export const progressStore = store;
 
 export function useProgress(): Progress {
-  return useSyncExternalStore(subscribe, () => state, () => state);
+  return usePersisted(store);
 }
 
 export const dayKey = (d: Date) => `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
 
-function fromDayKey(key: string): Date {
+export function fromDayKey(key: string): Date {
   const [y, m, d] = key.split('-').map(Number);
   return new Date(y, m - 1, d);
 }
@@ -110,16 +123,69 @@ export function nextReviewIn(p: Progress, now = new Date()): number | undefined 
   return waits.length ? Math.max(0, Math.min(...waits)) : undefined;
 }
 
-function bumpStreak(now: Date) {
+// ---------------------------------------------------------------------------
+// Recording
+
+const NO_DAY: DayStats = { xp: 0, answered: 0, firstTries: 0, firstRight: 0, ms: 0 };
+
+/** Pure: the progress after gaining `xp` today, with the streak kept alive. */
+function withXp(p: Progress, xp: number, now: Date): Progress {
+  if (xp <= 0) return p;
   const today = dayKey(now);
-  return state.streak.last === today ? state.streak : { count: currentStreak(state, now) + 1, last: today };
+  const day = p.days[today] ?? NO_DAY;
+  const streak =
+    p.streak.last === today
+      ? p.streak
+      : (() => {
+          const count = currentStreak(p, now) + 1;
+          // Records saved before `best` existed: the last streak is the best known.
+          return { count, last: today, best: Math.max(p.streak.best ?? p.streak.count, count) };
+        })();
+  return { ...p, xp: p.xp + xp, streak, days: { ...p.days, [today]: { ...day, xp: day.xp + xp } } };
+}
+
+/** Pure: the progress after one answered question. */
+export function withAttempt(p: Progress, attempt: Omit<Attempt, 't'>, now = new Date()): Progress {
+  const today = dayKey(now);
+  const day = p.days[today] ?? NO_DAY;
+  const ms = Math.max(0, Math.min(MAX_STEP_MS, Math.round(attempt.ms)));
+  const first = !attempt.retry;
+  const log = [...p.log, { ...attempt, ms, t: now.getTime() }];
+  return {
+    ...p,
+    log: log.length > LOG_CAP ? log.slice(log.length - LOG_CAP) : log,
+    days: {
+      ...p.days,
+      [today]: {
+        ...day,
+        answered: day.answered + 1,
+        firstTries: day.firstTries + (first ? 1 : 0),
+        firstRight: day.firstRight + (first && attempt.ok ? 1 : 0),
+        ms: day.ms + ms,
+      },
+    },
+  };
+}
+
+export function recordAttempt(attempt: Omit<Attempt, 't'>, xp = 0, now = new Date()) {
+  store.set((p) => withXp(withAttempt(p, attempt, now), xp, now));
+}
+
+/** Time spent reading theory counts as study too. */
+export function recordStudyTime(ms: number, now = new Date()) {
+  const add = Math.max(0, Math.min(MAX_STEP_MS, Math.round(ms)));
+  if (!add) return;
+  store.set((p) => {
+    const today = dayKey(now);
+    const day = p.days[today] ?? NO_DAY;
+    return { ...p, days: { ...p.days, [today]: { ...day, ms: day.ms + add } } };
+  });
 }
 
 export function recordLesson(lessonId: string, accuracy: number, xp: number, now = new Date()) {
-  const prev = state.completed[lessonId];
-  save({
-    xp: state.xp + xp,
-    completed: {
+  store.set((state) => {
+    const prev = state.completed[lessonId];
+    const completed = {
       ...state.completed,
       [lessonId]: {
         best: Math.max(prev?.best ?? 0, accuracy),
@@ -127,22 +193,24 @@ export function recordLesson(lessonId: string, accuracy: number, xp: number, now
         last: dayKey(now),
         box: nextBox(prev?.box, accuracy),
       },
-    },
-    streak: bumpStreak(now),
+    };
+    return withXp({ ...state, completed }, xp, now);
   });
 }
 
 /** A review session: each lesson's box moves with how well its questions went. */
 export function recordReview(accuracyByLesson: Record<string, number>, xp: number, now = new Date()) {
-  const completed = { ...state.completed };
-  for (const [id, accuracy] of Object.entries(accuracyByLesson)) {
-    const prev = completed[id];
-    if (!prev) continue;
-    completed[id] = { ...prev, last: dayKey(now), box: nextBox(prev.box, accuracy) };
-  }
-  save({ xp: state.xp + xp, completed, streak: bumpStreak(now) });
+  store.set((state) => {
+    const completed = { ...state.completed };
+    for (const [id, accuracy] of Object.entries(accuracyByLesson)) {
+      const prev = completed[id];
+      if (!prev) continue;
+      completed[id] = { ...prev, last: dayKey(now), box: nextBox(prev.box, accuracy) };
+    }
+    return withXp({ ...state, completed }, xp, now);
+  });
 }
 
 export function resetProgress() {
-  save(EMPTY);
+  store.set(EMPTY);
 }

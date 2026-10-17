@@ -11,9 +11,11 @@
     "typecheck": "tsc -b",
     "test": "vitest run",
     "test:watch": "vitest",
-    "sheet": "node --experimental-strip-types scripts/contact-sheet.ts"
+    "sheet": "node --experimental-strip-types scripts/contact-sheet.ts",
+    "serve": "node --experimental-strip-types scripts/serve.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.135.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   },

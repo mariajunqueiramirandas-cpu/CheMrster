@@ -1,12 +1,14 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { LESSON_BY_ID, unitOf } from '../../course/course.ts';
 import { createRng } from '../../course/random.ts';
 import type { TheoryCard } from '../../course/types.ts';
 import { ElementTile } from '../components/ElementTile.tsx';
 import { BoltIcon, CheckIcon, CloseIcon, FlameIcon } from '../components/Icons.tsx';
-import { TheoryCardView } from '../components/TheoryCardView.tsx';
+import { TheoryActions, TheoryCardView } from '../components/TheoryCardView.tsx';
+import { syncAfterPractice } from '../board-store.ts';
+import { typingIn } from '../hooks.ts';
 import { navigate } from '../router.ts';
-import { INTERVALS, currentStreak, recordLesson, useProgress } from '../store.ts';
+import { INTERVALS, currentStreak, recordLesson, recordStudyTime, useProgress } from '../store.ts';
 import { Practice, type PracticeItem } from './Practice.tsx';
 
 const XP_BASE = 10;
@@ -36,15 +38,17 @@ export function LessonScreen({ id }: { id: string }) {
 
   if (finished) return <LessonDone lessonId={id} accuracy={finished.accuracy} xp={finished.xp} />;
 
-  if (phase === 'theory') return <TheoryPhase cards={lesson.theory!} onDone={() => setPhase('practice')} onExit={exit} />;
+  if (phase === 'theory') return <TheoryPhase lessonId={id} cards={lesson.theory!} onDone={() => setPhase('practice')} onExit={exit} />;
 
   return (
     <Practice
       items={items}
+      source="lesson"
       onExit={exit}
       onFinish={({ accuracy }) => {
         const xp = XP_BASE + (accuracy === 1 ? XP_PERFECT : 0);
         recordLesson(id, accuracy, xp);
+        syncAfterPractice([id]);
         setFinished({ accuracy, xp });
       }}
     />
@@ -52,17 +56,21 @@ export function LessonScreen({ id }: { id: string }) {
 }
 
 /** Teach first: the lesson's cards one at a time, then the exercises. */
-function TheoryPhase({ cards, onDone, onExit }: { cards: TheoryCard[]; onDone: () => void; onExit: () => void }) {
+function TheoryPhase({ lessonId, cards, onDone, onExit }: { lessonId: string; cards: TheoryCard[]; onDone: () => void; onExit: () => void }) {
   const [index, setIndex] = useState(0);
   const last = index === cards.length - 1;
+  const shownAt = useRef(Date.now());
 
   useEffect(() => {
     window.scrollTo({ top: 0 });
+    shownAt.current = Date.now();
+    // Reading a card counts as study time when the learner moves on.
+    return () => recordStudyTime(Date.now() - shownAt.current);
   }, [index]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Enter' || e.target instanceof HTMLButtonElement) return;
+      if (e.key !== 'Enter' || e.target instanceof HTMLButtonElement || typingIn(e)) return;
       if (last) onDone();
       else setIndex((i) => i + 1);
     };
@@ -96,6 +104,7 @@ function TheoryPhase({ cards, onDone, onExit }: { cards: TheoryCard[]; onDone: (
           Teoria · {index + 1} de {cards.length}
         </p>
         <TheoryCardView card={cards[index]} animate />
+        <TheoryActions lessonId={lessonId} index={index} card={cards[index]} />
       </main>
 
       <footer className="lesson-foot">

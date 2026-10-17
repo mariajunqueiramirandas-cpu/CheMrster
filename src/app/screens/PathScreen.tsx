@@ -3,8 +3,9 @@ import { COURSE, LESSON_BY_ID, LESSONS } from '../../course/course.ts';
 import type { Lesson } from '../../course/types.ts';
 import { ElementTile, type TileState } from '../components/ElementTile.tsx';
 import { BoltIcon } from '../components/Icons.tsx';
-import { navigate } from '../router.ts';
-import { type Progress, dueLessons, nextReviewIn, useProgress } from '../store.ts';
+import { href, navigate } from '../router.ts';
+import { useSettings } from '../settings.ts';
+import { type Progress, dayKey, dueLessons, nextReviewIn, useProgress } from '../store.ts';
 
 const ROW = 112;
 const SWING = 64;
@@ -35,6 +36,7 @@ export function PathScreen() {
         </div>
       </header>
 
+      <TodayCard progress={progress} />
       <ReviewCard progress={progress} />
 
       {COURSE.map((unit) => (
@@ -49,6 +51,24 @@ export function PathScreen() {
 
       {open && <LessonSheet lesson={open} state={stateOf(open)} onClose={() => setOpen(null)} />}
     </div>
+  );
+}
+
+/** Today's XP against the daily goal, with the way to the full progress page. */
+function TodayCard({ progress }: { progress: Progress }) {
+  const { dailyGoal } = useSettings();
+  const xp = progress.days[dayKey(new Date())]?.xp ?? 0;
+  if (!progress.xp) return null;
+  return (
+    <a className="today" href={href({ name: 'progress' })}>
+      <span className="today-text">
+        <strong>Hoje: {xp} de {dailyGoal} XP</strong>
+        <span>{xp >= dailyGoal ? 'Meta cumprida' : 'Ver seu progresso'}</span>
+      </span>
+      <span className="meter meter--thin" aria-hidden="true">
+        <span style={{ width: `${Math.min(100, (xp / dailyGoal) * 100)}%` }} />
+      </span>
+    </a>
   );
 }
 

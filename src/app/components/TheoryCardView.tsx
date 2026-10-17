@@ -1,6 +1,9 @@
 /** A theory card: what the lesson's exercises are about to ask, with drawings to look at. */
 import { Fragment } from 'react';
 import type { TheoryCard } from '../../course/types.ts';
+import { saveToMap } from '../canvas-store.ts';
+import { ask } from '../tutor-store.ts';
+import { PinIcon, TutorIcon } from './Icons.tsx';
 import { SchemeView, SpecView, isWide } from './SchemeView.tsx';
 
 /** Paragraph text where **double asterisks** mark the key terms. */
@@ -56,5 +59,30 @@ export function TheoryCardView({ card, animate, headingLevel = 1 }: { card: Theo
         </aside>
       )}
     </article>
+  );
+}
+
+/** Under a theory card: ask the tutor to explain it another way, or keep it on the concept map. */
+export function TheoryActions({ lessonId, index, card }: { lessonId: string; index: number; card: TheoryCard }) {
+  return (
+    <div className="theory-actions">
+      <button
+        type="button"
+        className="btn btn--small btn--tutor"
+        onClick={() =>
+          ask({
+            text: 'Me explica este cartão de outro jeito, com um exemplo do dia a dia.',
+            screen: { kind: 'theory', lessonId, card },
+            about: `Teoria: ${card.title}`,
+            open: true,
+          })
+        }
+      >
+        <TutorIcon width={18} height={18} /> Explicar de outro jeito
+      </button>
+      <button type="button" className="btn btn--small" onClick={() => saveToMap({ kind: 'theory', title: card.title, lessonId, card: index })}>
+        <PinIcon width={18} height={18} /> Salvar no mapa
+      </button>
+    </div>
   );
 }

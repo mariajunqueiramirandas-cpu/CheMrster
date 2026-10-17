@@ -34,8 +34,15 @@
 
   --column: 560px;
   --gutter: 16px;
+
+  --cobalt-wash: #e2e8fb;
+  --amber: #9a5b00;
+  --amber-wash: #fbecd2;
+  --grid-dot: #c9d1d8;
+  --overlay: rgb(10 16 22 / 0.45);
 }
 
+/* Dark: follows the device unless the learner picked a theme in Ajustes. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
     color-scheme: dark;
@@ -56,7 +63,38 @@
     --wrong-wash: #3d1b19;
     --highlight: #f39bc9;
     --paper-shadow: 0 1px 0 rgb(0 0 0 / 0.4), 0 12px 28px -12px rgb(0 0 0 / 0.7);
+    --cobalt-wash: #1d2850;
+    --amber: #f0b44c;
+    --amber-wash: #3a2a10;
+    --grid-dot: #2c3742;
+    --overlay: rgb(0 0 0 / 0.6);
   }
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bench: #151b22;
+  --bench-deep: #222b35;
+  --rule: #34404c;
+  --surface: #1c242d;
+  --paper: #f5f5f1;
+  --text: #e6ebf0;
+  --muted: #9aa6b2;
+  --magenta: #e2489e;
+  --magenta-press: #b02a77;
+  --magenta-wash: #3e1830;
+  --cobalt: #8ea6ff;
+  --right: #4fc68a;
+  --right-wash: #163627;
+  --wrong: #ff7d73;
+  --wrong-wash: #3d1b19;
+  --highlight: #f39bc9;
+  --paper-shadow: 0 1px 0 rgb(0 0 0 / 0.4), 0 12px 28px -12px rgb(0 0 0 / 0.7);
+  --cobalt-wash: #1d2850;
+  --amber: #f0b44c;
+  --amber-wash: #3a2a10;
+  --grid-dot: #2c3742;
+  --overlay: rgb(0 0 0 / 0.6);
 }
 
 *,
@@ -118,21 +156,31 @@ button {
 
 /* ---------- shell ---------- */
 
+:root {
+  --topbar-h: 64px;
+  --tabbar-h: calc(66px + env(safe-area-inset-bottom));
+}
+
 .shell {
-  max-width: var(--column);
-  margin: 0 auto;
-  padding: 0 var(--gutter) calc(88px + env(safe-area-inset-bottom));
+  min-height: 100dvh;
+  padding-bottom: var(--tabbar-h);
 }
 
 .topbar {
   position: sticky;
   top: 0;
-  z-index: 5;
+  z-index: 20;
+  background: var(--bench);
+}
+
+.topbar-inner {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 0;
-  background: var(--bench);
+  max-width: 1200px;
+  height: var(--topbar-h);
+  margin: 0 auto;
+  padding: 0 var(--gutter);
 }
 
 .wordmark {
@@ -155,6 +203,7 @@ button {
   gap: 4px;
   font-weight: 700;
   color: var(--muted);
+  text-decoration: none;
 }
 
 .stat--hot {
@@ -164,27 +213,38 @@ button {
 .tabs {
   position: fixed;
   inset: auto 0 0 0;
-  z-index: 6;
+  z-index: 20;
   display: flex;
   justify-content: center;
-  gap: 8px;
-  padding: 8px var(--gutter) calc(8px + env(safe-area-inset-bottom));
+  gap: 2px;
+  height: var(--tabbar-h);
+  padding: 6px 6px env(safe-area-inset-bottom);
   background: var(--bench);
   border-top: 2px solid var(--bench-deep);
 }
 
 .tabs a {
-  flex: 0 1 180px;
+  flex: 1 1 0;
+  max-width: 120px;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 2px;
-  padding: 6px 12px;
+  padding: 4px 2px;
   border-radius: 12px;
-  font-size: var(--step--1);
+  font-size: 0.72rem;
   font-weight: 700;
   text-decoration: none;
   color: var(--muted);
+  white-space: nowrap;
+}
+
+.tabs a span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .tabs a[aria-current='page'] {
@@ -192,26 +252,180 @@ button {
   background: var(--magenta-wash);
 }
 
-@media (min-width: 760px) {
-  .tabs {
-    position: static;
-    padding: 0;
-    border: 0;
-    background: none;
-  }
-  .tabs a {
-    flex: 0 0 auto;
-    flex-direction: row;
-    gap: 6px;
-    font-size: var(--step-0);
-  }
-  .shell {
-    padding-bottom: 48px;
+.topbar .icon-btn {
+  flex: none;
+}
+
+/* The tutor is one tap away on every screen. */
+.tutor-fab {
+  position: fixed;
+  right: max(16px, env(safe-area-inset-right));
+  bottom: calc(var(--tabbar-h) + 14px);
+  z-index: 19;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 52px;
+  padding: 0 20px 0 16px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--cobalt);
+  color: #fff;
+  font-weight: 700;
+  box-shadow: 0 10px 24px -10px rgb(20 40 120 / 0.65);
+  cursor: pointer;
+}
+
+.tutor-fab:active {
+  transform: translateY(2px);
+}
+
+.topbar .topbar-tutor {
+  display: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .tutor-fab {
+    color: #0d1530;
   }
 }
 
+:root[data-theme='dark'] .tutor-fab {
+  color: #0d1530;
+}
+
+@media (min-width: 900px) {
+  :root {
+    --tabbar-h: 0px;
+  }
+  .tabs {
+    position: static;
+    height: auto;
+    padding: 0;
+    border: 0;
+    background: none;
+    margin-right: auto;
+  }
+  .tabs a {
+    flex: 0 0 auto;
+    max-width: none;
+    flex-direction: row;
+    gap: 6px;
+    padding: 8px 12px;
+    font-size: var(--step--1);
+  }
+  .wordmark {
+    margin-right: 12px;
+  }
+  .tutor-fab {
+    display: none;
+  }
+  .topbar .topbar-tutor {
+    display: inline-flex;
+    min-height: 40px;
+    padding: 6px 16px 6px 12px;
+    border: 0;
+    background: var(--cobalt);
+    color: #fff;
+    box-shadow: none;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .topbar .topbar-tutor {
+    color: #0d1530;
+  }
+}
+
+:root[data-theme='dark'] .topbar .topbar-tutor {
+  color: #0d1530;
+}
+
 .page {
-  padding-top: 8px;
+  max-width: var(--column);
+  margin: 0 auto;
+  padding: 8px var(--gutter) 48px;
+}
+
+.page--wide {
+  max-width: 1080px;
+}
+
+/* Room under the last thing on the page for the tutor button. */
+@media (max-width: 899px) {
+  .page:not(.page--full) {
+    padding-bottom: 96px;
+  }
+}
+
+.page--full {
+  max-width: none;
+  padding: 0;
+}
+
+/* ---------- toasts ---------- */
+
+.toasts {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--tabbar-h) + 80px);
+  z-index: 60;
+  display: grid;
+  gap: 8px;
+  width: min(440px, calc(100% - 32px));
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 10px 10px 16px;
+  border-radius: 14px;
+  background: var(--text);
+  color: var(--bench);
+  font-weight: 700;
+  font-size: var(--step--1);
+  box-shadow: 0 12px 28px -12px rgb(0 0 0 / 0.5);
+  pointer-events: auto;
+}
+
+.toast p {
+  flex: 1;
+}
+
+.toast a,
+.toast button {
+  flex: none;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+@media (min-width: 900px) {
+  .toasts {
+    bottom: 24px;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .toast {
+    animation: toast-in 180ms ease-out;
+  }
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
 }
 
 /* ---------- buttons ---------- */
@@ -1670,4 +1884,10 @@ button.tile:active {
     box-shadow: none;
     min-height: 0;
   }
+}
+
+.page-loading {
+  padding: 40px var(--gutter);
+  color: var(--muted);
+  text-align: center;
 }

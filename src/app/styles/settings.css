@@ -1,0 +1,171 @@
+/* Ajustes */
+
+.settings {
+  display: grid;
+  gap: 18px;
+  padding-top: 8px;
+}
+
+.settings h1 {
+  font-size: var(--step-3);
+  font-weight: 800;
+}
+
+.settings-section {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border-radius: 18px;
+  border: 2px solid var(--bench-deep);
+  background: var(--surface);
+}
+
+.settings-section h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--step-1);
+}
+
+.settings-section h2 svg {
+  color: var(--cobalt);
+}
+
+.settings-note {
+  color: var(--muted);
+  font-size: var(--step--1);
+}
+
+.settings-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+}
+
+.settings-status::before {
+  content: '';
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.settings-status--on::before {
+  background: var(--right);
+}
+
+.settings-status--error {
+  color: var(--wrong);
+}
+
+.settings-status--error::before {
+  background: var(--wrong);
+}
+
+.key-row {
+  display: flex;
+  gap: 8px;
+}
+
+.key-test {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+}
+
+.choice-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.choice-list legend {
+  margin-bottom: 8px;
+}
+
+.choice-list--row {
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+}
+
+.choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 2px solid var(--rule);
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.choice.is-on {
+  border-color: var(--magenta);
+  background: var(--magenta-wash);
+}
+
+.choice input {
+  margin-top: 4px;
+  accent-color: var(--magenta);
+}
+
+.choice span {
+  display: grid;
+}
+
+.choice span span {
+  color: var(--muted);
+  font-size: var(--step--1);
+}
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.settings-actions--danger {
+  padding-top: 8px;
+  border-top: 2px solid var(--bench-deep);
+}
+
+.shortcuts {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.shortcuts div {
+  display: grid;
+  grid-template-columns: minmax(0, 14em) 1fr;
+  gap: 12px;
+  font-size: var(--step--1);
+}
+
+.shortcuts dd {
+  margin: 0;
+  color: var(--muted);
+}
+
+kbd {
+  display: inline-block;
+  min-width: 1.6em;
+  padding: 0 5px;
+  border: 1.5px solid var(--rule);
+  border-bottom-width: 3px;
+  border-radius: 6px;
+  background: var(--bench);
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-align: center;
+}

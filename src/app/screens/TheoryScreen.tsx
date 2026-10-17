@@ -1,7 +1,7 @@
 /** A lesson's theory as one page, to read again before an exam or a review. */
 import { LESSON_BY_ID, LESSONS, unitOf } from '../../course/course.ts';
 import { ElementTile } from '../components/ElementTile.tsx';
-import { TheoryCardView } from '../components/TheoryCardView.tsx';
+import { TheoryActions, TheoryCardView } from '../components/TheoryCardView.tsx';
 import { href, navigate } from '../router.ts';
 import { useProgress } from '../store.ts';
 
@@ -32,6 +32,7 @@ export function TheoryScreen({ id }: { id: string }) {
       {lesson.theory.map((card, i) => (
         <section key={i} className="theory-page-card">
           <TheoryCardView card={card} headingLevel={2} />
+          <TheoryActions lessonId={id} index={i} card={card} />
         </section>
       ))}
       <div className="theory-page-actions">
