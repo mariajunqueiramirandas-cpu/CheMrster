@@ -12,20 +12,29 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "sheet": "node --experimental-strip-types scripts/contact-sheet.ts",
-    "serve": "node --experimental-strip-types scripts/serve.ts"
+    "serve": "node --experimental-strip-types server/main.ts",
+    "start": "node --experimental-strip-types server/main.ts"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.135.0",
-    "react": "^19.3.1",
-    "react-dom": "^19.3.1"
+    "@clerk/backend": "^3.25.0",
+    "pg": "^8.23.1"
   },
   "devDependencies": {
+    "@anthropic-ai/sdk": "^0.135.0",
+    "@clerk/localizations": "^4.23.0",
+    "@clerk/react": "^6.17.8",
     "@types/node": "^22.10.0",
+    "@types/pg": "^8.23.1",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
     "typescript": "~5.9.3",
     "vite": "^8.3.4",
     "vitest": "^5.0.5"
+  },
+  "engines": {
+    "node": ">=22.18"
   }
 }

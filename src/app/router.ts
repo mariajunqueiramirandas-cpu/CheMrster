@@ -1,6 +1,6 @@
 /**
  * Hash routes: #/ (trilha), #/licao/<id>, #/teoria/<id>, #/revisao, #/estruturas[?smiles=...],
- * #/tutor[/<conversa>], #/mapa, #/quadro, #/progresso, #/ajustes.
+ * #/tutor[/<conversa>], #/mapa, #/quadro, #/progresso, #/ajustes, #/planos (with accounts).
  */
 import { useEffect, useState } from 'react';
 
@@ -14,7 +14,8 @@ export type Route =
   | { name: 'canvas' }
   | { name: 'board' }
   | { name: 'progress' }
-  | { name: 'settings' };
+  | { name: 'settings' }
+  | { name: 'plans' };
 
 const SIMPLE: Record<string, Route> = {
   revisao: { name: 'review' },
@@ -22,6 +23,7 @@ const SIMPLE: Record<string, Route> = {
   quadro: { name: 'board' },
   progresso: { name: 'progress' },
   ajustes: { name: 'settings' },
+  planos: { name: 'plans' },
 };
 
 export function parseRoute(hash: string): Route {
@@ -57,6 +59,8 @@ export function href(route: Route): string {
       return '#/progresso';
     case 'settings':
       return '#/ajustes';
+    case 'plans':
+      return '#/planos';
     default:
       return '#/';
   }

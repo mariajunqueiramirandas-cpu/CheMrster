@@ -6,7 +6,7 @@ import { anthropicProxy, hostName } from './anthropic-proxy.ts';
 const realFetch = globalThis.fetch;
 
 async function serve(apiKey: string | undefined, allowedHosts?: string[]) {
-  const proxy = anthropicProxy(apiKey, allowedHosts);
+  const proxy = anthropicProxy(apiKey, { allowedHosts });
   const server = createServer((req, res) => proxy(req, res, () => ((res.statusCode = 404), res.end('next'))));
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
   const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;

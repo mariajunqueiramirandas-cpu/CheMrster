@@ -128,6 +128,10 @@ export async function runTurn({ client, model, messages, runTool, callbacks, sig
 
 /** A message for the learner when a request fails, and whether trying again can help. */
 export function describeError(err: unknown): { text: string; action?: 'settings' | 'retry' } {
+  // The app's own server: the learner's plan allowance is used up, or the session ended.
+  const own = err instanceof Anthropic.APIError ? (err.error as { error?: { type?: string; message?: string } } | undefined)?.error : undefined;
+  if (own?.type === 'quota_exceeded') return { text: own.message ?? 'O limite de hoje do tutor com IA acabou.', action: 'settings' };
+  if (own?.type === 'session_required') return { text: 'Sua sessão expirou. Recarregue a página e entre de novo.', action: 'retry' };
   if (err instanceof Anthropic.AuthenticationError || err instanceof Anthropic.PermissionDeniedError) {
     return { text: 'A chave da API não foi aceita. Confira a chave em Ajustes.', action: 'settings' };
   }
