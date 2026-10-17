@@ -24,6 +24,12 @@ export interface Atom {
   mapNumber?: number;
   /** Optional free-text label that replaces the element symbol when drawn (e.g. "R", "Ph"). */
   label?: string;
+  /** Condensed group drawn in place of several atoms ("COOH" / "HOOC" by reading direction). */
+  abbreviation?: { right: string; left: string };
+  /** Index of the atom this one was derived from when a molecule is rewritten for drawing. */
+  source?: number;
+  /** Original atoms folded into this one (abbreviations). */
+  members?: number[];
 }
 
 export interface Bond {
@@ -62,12 +68,13 @@ export class Molecule {
   addAtom(partial: Partial<Atom> & { element: string }): number {
     const index = this.atoms.length;
     this.atoms.push({
-      index,
       aromatic: false,
       charge: 0,
       hydrogens: 0,
       bracket: false,
       ...partial,
+      // Copies of atoms from another molecule get their new position here.
+      index,
     });
     this.adjacency.push([]);
     return index;

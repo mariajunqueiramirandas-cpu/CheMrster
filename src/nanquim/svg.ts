@@ -55,6 +55,25 @@ export function toSVG(d: Drawing, opts: SvgOptions = {}): string {
   parts.push(`<g stroke-linecap="round" stroke-linejoin="round" fill="none">`);
   for (const p of d.primitives) parts.push(primToSvg(p));
   parts.push('</g>');
+  if (d.outlines.length) {
+    parts.push('<g fill="none" stroke-linecap="round" stroke-linejoin="round">');
+    for (const o of d.outlines) {
+      const path = o.points.map((p, i) => `${i ? 'L' : 'M'}${f(p.x)} ${f(p.y)}`).join('') + 'Z';
+      parts.push(
+        `<path d="${path}" stroke="${o.color}" stroke-width="${f(o.width)}" stroke-dasharray="${f(o.dash[0])} ${f(o.dash[1])}"/>`,
+      );
+    }
+    parts.push('</g>');
+  }
+  if (d.texts.length) {
+    parts.push(`<g font-family="${esc(style.fontFamily)}" fill="${style.ink}">`);
+    for (const t of d.texts) {
+      parts.push(
+        `<text x="${f(t.x)}" y="${f(t.y)}" font-size="${f(t.size)}" font-weight="${t.weight}"${t.anchor === 'middle' ? ' text-anchor="middle"' : ''}>${esc(t.text)}</text>`,
+      );
+    }
+    parts.push('</g>');
+  }
   if (d.labels.length) {
     parts.push(
       `<g font-family="${esc(style.fontFamily)}" font-weight="${style.fontWeight}" style="font-kerning:none" text-rendering="geometricPrecision">`,

@@ -26,6 +26,10 @@ export interface DrawStyle {
   ink: string;
   /** 'mono' prints everything in ink; 'color' tints heteroatom labels. */
   palette: 'mono' | 'color';
+  /** Dashed outlines drawn around annotated groups. */
+  annotationColor: string;
+  /** Dash and gap of annotation outlines, as fractions of the bond length. */
+  annotationDash: [number, number];
 }
 
 const ACS: DrawStyle = {
@@ -42,9 +46,32 @@ const ACS: DrawStyle = {
   padding: 0.35,
   ink: 'currentColor',
   palette: 'mono',
+  annotationColor: 'currentColor',
+  annotationDash: [0.13, 0.1],
+};
+
+/**
+ * Measured on the INEP booklets (ENEM 2023, question 134, at 600 dpi): bond 15.6 pt,
+ * stroke 0.72 pt, inner double-bond offset 2.76 pt, Arial 9.75 pt labels. Bond length
+ * here is that 15.6 pt in CSS px, so 1:1 output matches the printed exam.
+ */
+const ENEM: DrawStyle = {
+  ...ACS,
+  bondLength: (15.6 * 96) / 72,
+  lineWidth: 0.72 / 15.6,
+  bondSpacing: 2.76 / 15.6,
+  wedgeWidth: 0.19,
+  hashSpacing: 0.16,
+  labelMargin: 0.1,
+  fontSize: 9.75 / 15.6,
+  fontFamily: "Arial, 'Liberation Sans', Arimo, 'Helvetica Neue', Helvetica, sans-serif",
+  subscriptScale: 0.7,
+  padding: 0.3,
 };
 
 export const STYLES = {
+  /** The look of the printed ENEM booklets. */
+  enem: ENEM,
   /** Journal print: thin hairlines, generous labels. */
   acs: ACS,
   /** Screen-first textbook look: slightly heavier strokes that survive small sizes. */

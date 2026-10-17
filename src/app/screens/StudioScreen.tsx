@@ -2,16 +2,36 @@ import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { chiralCarbons, classifyChain, functionalGroups, molarMass } from '../../chem/analysis.ts';
 import { MOLECULES } from '../../content/molecules.ts';
 import { subscript } from '../../course/generators.ts';
-import { type FormulaKind, STYLES, moleculeFromSmiles, renderSVG } from '../../nanquim/index.ts';
+import { type Annotation, type FormulaKind, STYLES, moleculeFromSmiles, renderSVG } from '../../nanquim/index.ts';
 import { DownloadIcon, PrintIcon } from '../components/Icons.tsx';
-import { MoleculeView } from '../components/MoleculeView.tsx';
+import { type MoleculeLook, MoleculeView } from '../components/MoleculeView.tsx';
 import { href } from '../router.ts';
 
 const FORMULAS: Array<{ id: FormulaKind; label: string }> = [
   { id: 'skeletal', label: 'Bastão' },
   { id: 'condensed', label: 'Condensada' },
-  { id: 'structural', label: 'Estrutural' },
+  { id: 'plana', label: 'Plana' },
+  { id: 'structural', label: 'Completa' },
 ];
+
+const LOOKS: Array<{ id: MoleculeLook; label: string }> = [
+  { id: 'enem', label: 'ENEM' },
+  { id: 'textbook', label: 'Livro' },
+  { id: 'acs', label: 'Revista' },
+];
+
+/** Short names the booklets write next to marked groups (2024 Q112: "nitro", "éter"). */
+const SHORT_NAME: Partial<Record<string, string>> = {
+  nitrocomposto: 'nitro',
+  'haleto orgânico': 'haleto',
+  'sal orgânico': 'carboxilato',
+};
+
+/** ENEM-style group marks: a dashed outline and the group's name, as in 2024 Q112. */
+function groupAnnotations(smiles: string): Annotation[] {
+  const mol = moleculeFromSmiles(smiles);
+  return functionalGroups(mol).map((g) => ({ atoms: g.atoms, label: SHORT_NAME[g.id] ?? g.id }));
+}
 
 const DEFAULT = MOLECULES.find((m) => m.id === 'capsaicina')!.smiles;
 
@@ -20,7 +40,8 @@ export function StudioScreen({ initialSmiles }: { initialSmiles?: string }) {
   const [formula, setFormula] = useState<FormulaKind>('skeletal');
   const [circles, setCircles] = useState(false);
   const [colored, setColored] = useState(false);
-  const [journal, setJournal] = useState(false);
+  const [look, setLook] = useState<MoleculeLook>('enem');
+  const [marked, setMarked] = useState(false);
   const [query, setQuery] = useState('');
   const smiles = useDeferredValue(text.trim());
 
@@ -43,12 +64,17 @@ export function StudioScreen({ initialSmiles }: { initialSmiles?: string }) {
   }, [parsed, smiles]);
 
   const entry = MOLECULES.find((m) => m.smiles === smiles);
+  const annotations = useMemo(() => (marked && 'mol' in parsed ? groupAnnotations(smiles) : undefined), [marked, parsed, smiles]);
   const svgFile = () => {
     const svg = renderSVG(smiles, {
       formula,
       aromaticCircles: circles,
-      style: { ...(journal ? STYLES.acs : STYLES.textbook), ink: '#000000', palette: colored ? 'color' : 'mono' },
+      conventions: look === 'enem' ? 'enem' : 'textbook',
+      style: { ...STYLES[look], ink: '#000000', palette: colored ? 'color' : 'mono' },
+      annotations,
+      caption: entry?.name,
       title: entry?.name,
+      scale: look === 'textbook' ? 1 : 2,
     });
     const blob = new Blob([`<?xml version="1.0" encoding="UTF-8"?>\n${svg}`], { type: 'image/svg+xml' });
     const url = URL.createObjectURL(blob);
@@ -90,13 +116,15 @@ export function StudioScreen({ initialSmiles }: { initialSmiles?: string }) {
       <figure className="paper paper--studio">
         {'mol' in parsed ? (
           <MoleculeView
-            key={`${smiles}-${formula}`}
+            key={`${smiles}-${formula}-${look}`}
             smiles={smiles}
             formula={formula}
-            size={journal ? 30 : 44}
+            size={look === 'acs' ? 30 : 42}
+            look={look}
             aromaticCircles={circles}
             colored={colored}
-            journal={journal}
+            annotations={annotations}
+            caption={entry?.name}
             animate
             title={entry?.name}
           />
@@ -105,11 +133,10 @@ export function StudioScreen({ initialSmiles }: { initialSmiles?: string }) {
             {parsed.error}
           </p>
         )}
-        {entry && <figcaption>{entry.name}</figcaption>}
       </figure>
 
       <div className="studio-controls">
-        <div className="segmented" role="radiogroup" aria-label="Tipo de fórmula">
+        <div className="segmented segmented--four" role="radiogroup" aria-label="Tipo de fórmula">
           {FORMULAS.map((f) => (
             <button
               key={f.id}
@@ -123,10 +150,24 @@ export function StudioScreen({ initialSmiles }: { initialSmiles?: string }) {
             </button>
           ))}
         </div>
+        <div className="segmented segmented--looks" role="radiogroup" aria-label="Estilo do desenho">
+          {LOOKS.map((l) => (
+            <button
+              key={l.id}
+              type="button"
+              role="radio"
+              aria-checked={look === l.id}
+              className={look === l.id ? 'is-on' : ''}
+              onClick={() => setLook(l.id)}
+            >
+              {l.label}
+            </button>
+          ))}
+        </div>
         <div className="toggles">
+          <Toggle checked={marked} onChange={setMarked} label="Marcar funções orgânicas" />
           <Toggle checked={circles} onChange={setCircles} label="Anel aromático com círculo" />
           <Toggle checked={colored} onChange={setColored} label="Heteroátomos coloridos" />
-          <Toggle checked={journal} onChange={setJournal} label="Traço de revista (ACS)" />
         </div>
         <div className="studio-actions">
           <button type="button" className="btn" onClick={svgFile} disabled={!('mol' in parsed)}>

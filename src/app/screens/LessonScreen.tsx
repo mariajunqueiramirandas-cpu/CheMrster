@@ -181,7 +181,9 @@ function ChoiceView({
   const locked = verdict !== null;
   useNumberKeys(exercise.options.length, locked, onAnswer);
   // Short answers (numbers, cis/trans, Sim/Não) sit side by side.
-  const row = exercise.options.length <= 4 && exercise.options.every((o) => o.length <= 11);
+  const row =
+    (exercise.options.length === 2 && exercise.options.every((o) => o.length <= 12)) ||
+    (exercise.options.length <= 4 && exercise.options.every((o) => o.length <= 4));
   return (
     <>
       {exercise.molecule && (
@@ -189,11 +191,12 @@ function ChoiceView({
           <MoleculeView
             smiles={exercise.molecule.smiles}
             formula={exercise.molecule.formula}
-            highlight={exercise.molecule.highlight}
+            outline={exercise.molecule.highlight}
+            caption={exercise.molecule.caption}
+            source={exercise.molecule.source}
             size={44}
             animate
           />
-          {exercise.molecule.caption && <figcaption>{exercise.molecule.caption}</figcaption>}
         </figure>
       )}
       <div

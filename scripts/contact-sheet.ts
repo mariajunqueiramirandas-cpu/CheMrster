@@ -22,7 +22,12 @@ for (const m of MOLECULES) {
   if (only && !only.includes(m.id)) continue;
   let svg: string;
   try {
-    svg = renderSVG(m.smiles, { style, title: m.name });
+    svg = renderSVG(m.smiles, {
+      style,
+      title: m.name,
+      // The ENEM look is a style plus the booklets' drawing conventions.
+      ...(style === 'enem' ? { conventions: 'enem' as const, scale: 2 } : {}),
+    });
   } catch (err) {
     failures++;
     svg = `<pre style="color:#b00">${String(err)}</pre>`;

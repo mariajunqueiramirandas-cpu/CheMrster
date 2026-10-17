@@ -7,8 +7,21 @@
 import { type DepictOptions, depict } from './depict.ts';
 import { type SvgOptions, toSVG } from './svg.ts';
 
-export { depict, expandHydrogens, moleculeFromSmiles } from './depict.ts';
-export type { AtomSite, DepictOptions, Drawing, FormulaKind, Highlight, Primitive } from './depict.ts';
+export { CONVENTIONS, depict, expandHydrogens, moleculeFromSmiles, resolveConventions } from './depict.ts';
+export type {
+  Annotation,
+  AtomSite,
+  Conventions,
+  DepictOptions,
+  Drawing,
+  FormulaKind,
+  FreeText,
+  Highlight,
+  OutlinePrim,
+  Primitive,
+} from './depict.ts';
+export { ALL_ABBREVIATIONS, abbreviate } from './transform.ts';
+export type { AbbreviationName } from './transform.ts';
 export { toSVG } from './svg.ts';
 export type { SvgOptions } from './svg.ts';
 export { parseSmiles, SmilesError } from './smiles.ts';

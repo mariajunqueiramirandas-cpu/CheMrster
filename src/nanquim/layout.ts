@@ -38,6 +38,21 @@ export interface LayoutOptions {
   rotationStep?: number;
   /** Let hydrogens overlap freely (they are folded into labels afterwards). */
   ignoreHydrogenClashes?: boolean;
+  /**
+   * 'upright' stands a ring with one substituent (or two, ortho/meta) on end with the
+   * main group pointing up, as in ENEM booklets. Default 'landscape'.
+   */
+  pose?: 'landscape' | 'upright';
+  /**
+   * Which path becomes the straight main chain of written-out formulas: the longest
+   * carbon path (default) or the longest path ending in functional groups (HS–C–C–COOH).
+   */
+  chain?: 'carbon' | 'functional';
+  /**
+   * The formula writes hydrogens and carbons out (structural, condensed, plana): chains
+   * run straight through 2-connected atoms. Default: detected from explicit H atoms.
+   */
+  writtenOut?: boolean;
 }
 
 export function computeLayout(mol: Molecule, options: LayoutOptions = {}): Vec[] {
@@ -45,10 +60,10 @@ export function computeLayout(mol: Molecule, options: LayoutOptions = {}): Vec[]
   const coords: Vec[] = mol.atoms.map(() => vec(0, 0));
   const components = mol.components();
   for (const comp of components) {
-    const placer = new ComponentPlacer(mol, info, comp, coords);
+    const placer = new ComponentPlacer(mol, info, comp, coords, options.chain ?? 'carbon', options.writtenOut);
     placer.run();
     refineOverlaps(mol, options.ignoreHydrogenClashes ? comp.filter((a) => mol.atoms[a].element !== 'H') : comp, coords, info);
-    orient(mol, comp, coords, info, options.rotationStep);
+    orient(mol, comp, coords, info, options.rotationStep, options.pose ?? 'landscape');
   }
   arrangeComponents(mol, components, coords);
   return coords;
@@ -327,10 +342,19 @@ class ComponentPlacer {
   private readonly systemLayouts: Map<number, Vec>[];
   private readonly queue: number[] = [];
   private readonly explicitH: boolean;
+  private readonly chain: 'carbon' | 'functional';
 
-  constructor(mol: Molecule, info: RingInfo, comp: number[], out: Vec[]) {
+  constructor(
+    mol: Molecule,
+    info: RingInfo,
+    comp: number[],
+    out: Vec[],
+    chain: 'carbon' | 'functional',
+    writtenOut?: boolean,
+  ) {
     this.mol = mol;
-    this.explicitH = comp.some((a) => mol.atoms[a].element === 'H' && mol.degree(a) === 1);
+    this.chain = chain;
+    this.explicitH = writtenOut ?? comp.some((a) => mol.atoms[a].element === 'H' && mol.degree(a) === 1);
     this.comp = comp;
     this.out = out;
     this.pos = mol.atoms.map(() => undefined);
@@ -373,6 +397,7 @@ class ComponentPlacer {
   /** One end of the longest heavy-atom path, so the backbone becomes the horizontal zig-zag. */
   private chainSeed(): number {
     const heavyAtom = (x: number) => this.mol.atoms[x].element !== 'H';
+    if (this.chain === 'functional') return this.functionalSeed(heavyAtom);
     // Written-out formulas hang everything off the carbon backbone.
     const carbons = this.comp.filter((a) => this.mol.atoms[a].element === 'C');
     const backbone = this.explicitH && carbons.length ? (x: number) => this.mol.atoms[x].element === 'C' : heavyAtom;
@@ -402,6 +427,41 @@ class ComponentPlacer {
     return isHetero(a) && !isHetero(b) ? b : a;
   }
 
+  /**
+   * End of the longest heavy-atom path, preferring paths whose two ends are functional
+   * groups (heteroatoms or condensed groups), so the chain reads HS–C–C–COOH.
+   */
+  private functionalSeed(heavyAtom: (x: number) => boolean): number {
+    const heavy = this.comp.filter(heavyAtom);
+    if (!heavy.length) return this.comp[0];
+    const functional = (x: number) => {
+      const a = this.mol.atoms[x];
+      return a.element !== 'C' || !!a.abbreviation;
+    };
+    let best: [number, number] = [heavy[0], heavy[0]];
+    let bestKey = [-1, -1];
+    for (const s0 of heavy) {
+      const d = new Map<number, number>([[s0, 0]]);
+      const q = [s0];
+      for (let i = 0; i < q.length; i++) {
+        for (const w of this.mol.neighbors(q[i])) {
+          if (d.has(w) || !heavyAtom(w)) continue;
+          d.set(w, d.get(q[i])! + 1);
+          q.push(w);
+        }
+      }
+      for (const [t, dist] of d) {
+        const key = [dist, Number(functional(s0)) + Number(functional(t))];
+        if (key[0] > bestKey[0] || (key[0] === bestKey[0] && key[1] > bestKey[1])) {
+          bestKey = key;
+          best = [s0, t];
+        }
+      }
+    }
+    // Start from the end that is not a condensed group, so "COOH" closes the line.
+    return this.mol.atoms[best[0]].abbreviation ? best[1] : best[0];
+  }
+
   /** Size and depth of the branch reached through `child` without passing `from`. */
   private branchWeight(from: number, child: number): number {
     const seen = new Set([from, child]);
@@ -411,7 +471,8 @@ class ComponentPlacer {
     for (let i = 0; i < q.length; i++) {
       const [v, d] = q[i];
       if (this.mol.atoms[v].element !== 'H') {
-        heavy++;
+        // A condensed group (COOH) weighs as much as the atoms it stands for.
+        heavy += this.mol.atoms[v].members?.length ?? 1;
         depth = Math.max(depth, d);
       }
       for (const w of this.mol.neighbors(v)) {
@@ -426,8 +487,9 @@ class ComponentPlacer {
 
   private isLinear(atom: number): boolean {
     if (this.mol.degree(atom) !== 2) return false;
-    // In written-out formulas (explicit H atoms) chains run straight through -O-, -NH-.
-    if (this.explicitH && this.systemOf[atom] < 0 && this.mol.neighbors(atom).every((n) => this.mol.atoms[n].element !== 'H')) {
+    // In written-out formulas (explicit H atoms) chains run straight through -O-, -NH-,
+    // and end groups read straight too (C–O–H, HS–C). Water stays bent.
+    if (this.explicitH && this.systemOf[atom] < 0 && this.mol.neighbors(atom).some((n) => this.mol.atoms[n].element !== 'H')) {
       return true;
     }
     let doubles = 0;
@@ -695,14 +757,92 @@ function refineOverlaps(mol: Molecule, comp: number[], coords: Vec[], info: Ring
 // ---------------------------------------------------------------------------
 // Orientation and arrangement
 
-function orient(mol: Molecule, comp: number[], coords: Vec[], info: RingInfo, rotationStep?: number) {
+/** Rough priority of a substituent for the upright pose: acids and esters first. */
+function substituentRank(mol: Molecule, ringAtom: number, first: number): number {
+  const a = mol.atoms[first];
+  const nbrs = mol.neighbors(first).filter((x) => x !== ringAtom);
+  const has = (el: string, order: number) =>
+    nbrs.some((x) => mol.atoms[x].element === el && mol.bondBetween(first, x)!.order === order);
+  if (a.abbreviation) return a.abbreviation.right.startsWith('CO') ? 90 : 72;
+  if (a.element === 'C' && has('O', 2) && has('O', 1)) return 90;
+  if (a.element === 'C' && has('O', 2) && has('N', 1)) return 80;
+  if (a.element === 'C' && has('N', 3)) return 75;
+  if (a.element === 'C' && has('O', 2)) return 70;
+  if (a.element === 'O' && a.hydrogens > 0) return 60;
+  if (a.element === 'N') return 55;
+  if (a.element === 'S') return 50;
+  if (a.element === 'O') return 40;
+  if (['F', 'Cl', 'Br', 'I'].includes(a.element)) return 20;
+  return 30;
+}
+
+/**
+ * For the upright pose: the bond (ring atom -> substituent) that should point up, or
+ * undefined when the molecule does not have a single ring with 1 or 2 (ortho/meta) groups.
+ */
+type Upright = { kind: 'up'; bond: [number, number] } | { kind: 'para'; bond: [number, number]; other: [number, number] };
+
+function uprightBond(mol: Molecule, comp: number[], info: RingInfo): Upright | undefined {
+  const compSet = new Set(comp);
+  const systems = info.systems.filter((sys) => compSet.has(info.rings[sys[0]][0]));
+  if (systems.length !== 1 || systems[0].length !== 1) return undefined;
+  const ring = info.rings[systems[0][0]];
+  const subs: Array<[number, number]> = [];
+  for (const r of ring) {
+    for (const n of mol.neighbors(r)) {
+      if (!ring.includes(n) && mol.atoms[n].element !== 'H') subs.push([r, n]);
+    }
+  }
+  if (subs.length === 0 || subs.length > 2) return undefined;
+  if (subs.length === 2) {
+    const i = ring.indexOf(subs[0][0]);
+    const j = ring.indexOf(subs[1][0]);
+    const gap = Math.min(Math.abs(i - j), ring.length - Math.abs(i - j));
+    if (gap === 0) return undefined;
+    if (gap >= ring.length / 2) {
+      // Para: the booklets lay the axis rising to the right, the bigger group on the right.
+      const size = (s: [number, number]) => branchSize(mol, s[0], s[1]);
+      const [small, big] = size(subs[0]) <= size(subs[1]) ? subs : [subs[1], subs[0]];
+      return { kind: 'para', bond: big, other: small };
+    }
+  }
+  const bond = subs.sort((p, q) => substituentRank(mol, q[0], q[1]) - substituentRank(mol, p[0], p[1]))[0];
+  return { kind: 'up', bond };
+}
+
+function branchSize(mol: Molecule, from: number, start: number): number {
+  const seen = new Set([from, start]);
+  const q = [start];
+  let n = 0;
+  for (let i = 0; i < q.length; i++) {
+    if (mol.atoms[q[i]].element !== 'H') n += mol.atoms[q[i]].members?.length ?? 1;
+    for (const w of mol.neighbors(q[i])) if (!seen.has(w)) (seen.add(w), q.push(w));
+  }
+  return n;
+}
+
+function orient(
+  mol: Molecule,
+  comp: number[],
+  coords: Vec[],
+  info: RingInfo,
+  rotationStep?: number,
+  pose: 'landscape' | 'upright' = 'landscape',
+) {
   if (comp.length < 2) return;
+  const upright = pose === 'upright' ? uprightBond(mol, comp, info) : undefined;
+  const carbonylOf = upright
+    ? mol
+        .neighbors(upright.bond[1])
+        .find((x) => mol.atoms[x].element === 'O' && mol.degree(x) === 1 && mol.bondBetween(upright.bond[1], x)!.order === 2)
+    : undefined;
   const compSet = new Set(comp);
   const hasRings = comp.some((a) => info.atomRings[a].length > 0);
   const c = centroid(comp.map((a) => coords[a]));
   const base = comp.map((a) => sub(coords[a], c));
   const index = new Map(comp.map((a, i) => [a, i]));
   const hetero = comp.map((a) => !['C', 'H'].includes(mol.atoms[a].element));
+  const condensed = comp.map((a) => !!mol.atoms[a].abbreviation);
   const carbonylO = comp.map(
     (a) => mol.atoms[a].element === 'O' && mol.degree(a) === 1 && mol.bonds[mol.adjacency[a][0]].order === 2,
   );
@@ -741,7 +881,9 @@ function orient(mol: Molecule, comp: number[], coords: Vec[], info: RingInfo, ro
       let hx = 0;
       let hy = 0;
       let oy = 0;
+      let ax = 0;
       pts.forEach((p, i) => {
+        if (condensed[i]) ax += p.x;
         if (hetero[i]) {
           hx += p.x;
           hy += p.y;
@@ -770,12 +912,27 @@ function orient(mol: Molecule, comp: number[], coords: Vec[], info: RingInfo, ro
         const deg = ((Math.atan2(pts[ib].y - pts[ia].y, pts[ib].x - pts[ia].x) / DEG) % 180 + 180) % 180;
         if ([0, 30, 90, 150, 180].some((g) => Math.abs(deg - g) < 1)) onGrid++;
       }
+      let up = 0;
+      if (upright) {
+        const ia = index.get(upright.bond[0])!;
+        const ib = index.get(upright.bond[1])!;
+        const dir = Math.atan2(pts[ib].y - pts[ia].y, pts[ib].x - pts[ia].x);
+        const target = upright.kind === 'up' ? Math.PI / 2 : Math.PI / 6;
+        up = Math.abs(dir - target) < 0.05 ? 2 : 0;
+        // Booklets put the C=O of the top group up-left (O=C–H, O=C–OH).
+        if (up && upright.kind === 'up' && carbonylOf !== undefined) {
+          const io = index.get(carbonylOf)!;
+          if (pts[io].x < pts[ib].x - 1e-6) up += 1;
+        }
+      }
       const key = [
+        up,
         systemAtoms.length ? q(extent(pts, systemAtoms)) : 0,
         q(extent(pts)),
         big,
         q(smallX),
         q(smallY),
+        q(ax),
         q(hx),
         q(oy),
         q(hy),

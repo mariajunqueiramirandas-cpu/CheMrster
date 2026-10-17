@@ -8,8 +8,10 @@ export interface MolSpec {
   formula?: FormulaKind;
   /** Atoms to tint, e.g. the functional group being asked about. */
   highlight?: number[];
-  /** Shown under the drawing. Only set when the name does not give the answer away. */
+  /** Shown in bold under the drawing. Only set when the name does not give the answer away. */
   caption?: string;
+  /** Line under the caption, ENEM style: "(no óleo de anis)". */
+  source?: string;
 }
 
 interface BaseExercise {

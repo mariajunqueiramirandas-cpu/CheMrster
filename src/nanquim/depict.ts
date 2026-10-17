@@ -31,26 +31,91 @@ import { ringInfo } from './rings.ts';
 import { parseSmiles } from './smiles.ts';
 import { assignWedges } from './stereo.ts';
 import { type DrawStyle, type StyleName, resolveStyle } from './style.ts';
+import { roundedHull } from './outline.ts';
+import { type AbbreviationName, ALL_ABBREVIATIONS, abbreviate, addHydrogens, markSources, subset } from './transform.ts';
 
 export interface Highlight {
+  /** Atoms of the parsed molecule; bonds between two highlighted atoms light up too. */
   atoms?: number[];
   bonds?: number[];
   color: string;
 }
 
-export type FormulaKind = 'skeletal' | 'condensed' | 'structural';
+/** A dashed outline around a group of atoms, optionally named in bold (ENEM 2024, Q112). */
+export interface Annotation {
+  atoms: number[];
+  label?: string;
+}
+
+export type FormulaKind = 'skeletal' | 'condensed' | 'plana' | 'structural';
+
+/** House rules for how a structure is written, independent of stroke and type sizes. */
+export interface Conventions {
+  /** Draw the hydrogen of an aldehyde as its own atom (O=C–H). */
+  aldehydeHydrogen: boolean;
+  /** Draw the N–H of open-chain amines and amides as a bond to an H. */
+  amineHydrogen: boolean;
+  /**
+   * Which carbons get a written label in skeletal formulas. 'enem' labels methyls on O
+   * or S (H3C–O), terminal =CH2 and methyls on C=C carbons, as the booklets do.
+   */
+  carbonLabels: 'none' | 'terminal' | 'enem' | 'all';
+  /** Put single-atom counter-ions right next to the opposite charge ("O⁻ Na⁺"). */
+  ionPairs: boolean;
+  /** Stand a ring with one main group (or two, ortho/meta) on end, group up. */
+  pose: 'landscape' | 'upright';
+  /** Groups written as condensed text in skeletal formulas. */
+  abbreviations: AbbreviationName[];
+}
+
+export const CONVENTIONS = {
+  textbook: {
+    aldehydeHydrogen: false,
+    amineHydrogen: false,
+    carbonLabels: 'none',
+    ionPairs: false,
+    pose: 'landscape',
+    abbreviations: [],
+  },
+  /** Conventions observed in the INEP booklets, 2021–2025. */
+  enem: {
+    aldehydeHydrogen: true,
+    amineHydrogen: true,
+    carbonLabels: 'enem',
+    ionPairs: true,
+    pose: 'upright',
+    abbreviations: [],
+  },
+} satisfies Record<string, Conventions>;
+
+export function resolveConventions(c?: keyof typeof CONVENTIONS | Partial<Conventions>): Conventions {
+  if (!c) return CONVENTIONS.textbook as Conventions;
+  if (typeof c === 'string') return CONVENTIONS[c] as Conventions;
+  return { ...(CONVENTIONS.textbook as Conventions), ...c };
+}
 
 export interface DepictOptions {
   style?: StyleName | Partial<DrawStyle>;
   /**
    * 'skeletal' (fórmula de linhas / bastão, default), 'condensed' (H3C–CH2–OH with
-   * straight chains) or 'structural' (every atom and bond written out).
+   * straight chains), 'plana' (ENEM's fórmula estrutural plana: every bond of the
+   * carbon backbone drawn, end groups condensed as CH3, NH2, COOH) or 'structural'
+   * (every atom and bond written out).
    */
   formula?: FormulaKind;
   /** Which carbons get a written "C" label in skeletal formulas. */
   carbonLabels?: 'none' | 'terminal' | 'all';
   /** Same as formula: 'structural'. */
   explicitHydrogens?: boolean;
+  /** House rules (explicit hydrogens, carbon labels, pose...). Default 'textbook'. */
+  conventions?: keyof typeof CONVENTIONS | Partial<Conventions>;
+  /** Groups to write as condensed text (COOH, NO2...); defaults to the conventions'. */
+  abbreviations?: AbbreviationName[];
+  /** Dashed, optionally labelled outlines around groups of atoms. */
+  annotations?: Annotation[];
+  /** Bold name under the structure, and an optional source line under it. */
+  caption?: string;
+  source?: string;
   /** Draw aromatic rings with an inscribed circle instead of Kekulé double bonds. */
   aromaticCircles?: boolean;
   /** Wedge/hash bonds from @/@@ (default true). */
@@ -86,7 +151,25 @@ export interface CirclePrim {
 
 export type Primitive = LinePrim | PolygonPrim | CirclePrim;
 
+export interface OutlinePrim {
+  points: Vec[];
+  width: number;
+  dash: [number, number];
+  color: string;
+}
+
+/** Free text such as captions and annotation names; `y` is the baseline. */
+export interface FreeText {
+  text: string;
+  x: number;
+  y: number;
+  size: number;
+  weight: number;
+  anchor: 'start' | 'middle';
+}
+
 export interface AtomSite {
+  /** Index in the molecule that was passed in (or parsed), -1 for atoms added for drawing. */
   index: number;
   x: number;
   y: number;
@@ -95,12 +178,16 @@ export interface AtomSite {
 }
 
 export interface Drawing {
+  /** The molecule as drawn (after abbreviations and explicit hydrogens). */
   molecule: Molecule;
   style: DrawStyle;
   viewBox: { x: number; y: number; width: number; height: number };
   underlay: Primitive[];
   primitives: Primitive[];
   labels: AtomLabel[];
+  outlines: OutlinePrim[];
+  texts: FreeText[];
+  /** One entry per drawn atom, in drawing order. */
   atoms: AtomSite[];
 }
 
@@ -134,9 +221,24 @@ export function expandHydrogens(mol: Molecule): Molecule {
 
 /** Condensed formulas need room for "CH2" between bonds. */
 const CONDENSED_STRETCH = 1.75;
+/** Plana formulas write CH3/COOH at the ends and need a little less. */
+const PLANA_STRETCH = 1.6;
+
+/** Atoms whose hydrogen the conventions want drawn as a bond. */
+function wantsExplicitH(mol: Molecule, i: number, conv: Conventions): boolean {
+  const a = mol.atoms[i];
+  if (a.hydrogens !== 1 || mol.degree(i) !== 2 || a.charge !== 0) return false;
+  const inRing = mol.rings.some((r) => r.includes(i));
+  if (conv.aldehydeHydrogen && a.element === 'C' && !a.aromatic && !inRing) {
+    return mol.neighbors(i).some((n) => mol.atoms[n].element === 'O' && mol.degree(n) === 1 && mol.bondBetween(i, n)!.order === 2);
+  }
+  return conv.amineHydrogen && a.element === 'N' && !inRing && !a.aromatic;
+}
 
 export function depict(input: string | Molecule, options: DepictOptions = {}): Drawing {
-  let mol = typeof input === 'string' ? moleculeFromSmiles(input) : input;
+  const conv = resolveConventions(options.conventions);
+  const style = resolveStyle(options.style);
+  let mol = markSources(typeof input === 'string' ? moleculeFromSmiles(input) : input);
   const formula: FormulaKind = options.formula ?? (options.explicitHydrogens ? 'structural' : 'skeletal');
   let coords: Vec[];
   if (formula === 'structural') {
@@ -149,12 +251,66 @@ export function depict(input: string | Molecule, options: DepictOptions = {}): D
     coords = computeLayout(full, { rotationStep: 90, ignoreHydrogenClashes: true })
       .slice(0, mol.atoms.length)
       .map((p) => scale(p, CONDENSED_STRETCH));
+  } else if (formula === 'plana') {
+    // ENEM's "fórmula estrutural plana": end groups condensed (CH3, NH2, COOH), the
+    // backbone carbons written as C with every bond, hydrogens included, drawn.
+    const reduced = abbreviate(mol, options.abbreviations ?? ALL_ABBREVIATIONS);
+    const full = expandHydrogens(reduced);
+    const all = computeLayout(full, { rotationStep: 90, chain: 'functional', ignoreHydrogenClashes: true });
+    const n = reduced.atoms.length;
+    const backbone = (i: number) => {
+      const a = reduced.atoms[i];
+      return a.element === 'C' && !a.abbreviation && reduced.degree(i) >= 2;
+    };
+    const keep = full.atoms.map((a) => a.index).filter((i) => i < n || backbone(full.neighbors(i)[0]));
+    const { mol: drawn, map } = subset(full, keep);
+    for (let i = 0; i < n; i++) drawn.atoms[map.get(i)!].hydrogens = backbone(i) ? 0 : reduced.atoms[i].hydrogens;
+    coords = keep.map((i) => scale(all[i], PLANA_STRETCH));
+    mol = drawn;
   } else {
-    coords = computeLayout(mol);
+    mol = abbreviate(mol, options.abbreviations ?? conv.abbreviations);
+    if (conv.aldehydeHydrogen || conv.amineHydrogen) {
+      const before = mol;
+      mol = addHydrogens(before, (i) => wantsExplicitH(before, i, conv));
+    }
+    coords = computeLayout(mol, { pose: conv.pose, writtenOut: false });
   }
+  if (conv.ionPairs) pairIons(mol, coords, style);
   const info = ringInfo(mol, mol.rings);
   if (options.stereo !== false) assignWedges(mol, coords, info.bondInRing);
-  return draw(mol, coords, { ...options, formula });
+  const carbonLabels = formula === 'skeletal' ? (options.carbonLabels ?? conv.carbonLabels) : 'all';
+  return draw(mol, coords, { ...options, formula, style }, carbonLabels);
+}
+
+/**
+ * Move each single-atom ion (Na+, K+, Cl-...) right beside an atom of opposite
+ * charge, on that atom's free side, the way "O⁻ Na⁺" is set in print.
+ */
+function pairIons(mol: Molecule, coords: Vec[], style: DrawStyle) {
+  const comps = mol.components();
+  if (comps.length < 2) return;
+  const fs = style.fontSize;
+  const used = new Set<number>();
+  for (const comp of comps) {
+    if (comp.length !== 1 || !mol.atoms[comp[0]].charge) continue;
+    const ion = comp[0];
+    const q = mol.atoms[ion].charge;
+    const partner = mol.atoms.find((a) => a.charge * q < 0 && mol.degree(a.index) > 0 && !used.has(a.index));
+    if (!partner) continue;
+    used.add(partner.index);
+    const p = coords[partner.index];
+    const angles = mol.neighbors(partner.index).map((n) => angleOf(sub(coords[n], p)));
+    // Reading order first: to the right unless a bond is in the way, then left, below, above.
+    const dirs = [vec(1, 0), vec(-1, 0), vec(0, -1), vec(0, 1)];
+    const clearance = (d: Vec) => Math.min(2, ...angles.map((t) => 1 - (Math.cos(t) * d.x + Math.sin(t) * d.y)));
+    const dir = dirs.find((d) => clearance(d) >= 0.9) ?? [...dirs].sort((a, b) => clearance(b) - clearance(a))[0];
+    const chargeW = advance('+') * style.subscriptScale * fs * String(Math.abs(partner.charge)).length;
+    const along =
+      dir.x !== 0
+        ? (advance(partner.element) * fs) / 2 + chargeW + 0.35 * fs + (advance(mol.atoms[ion].element) * fs) / 2
+        : FONT_METRICS.capHeight * fs + 0.6 * fs;
+    coords[ion] = add(p, scale(dir, along));
+  }
 }
 
 function labelColor(element: string, style: DrawStyle): string {
@@ -163,15 +319,37 @@ function labelColor(element: string, style: DrawStyle): string {
   return c && c !== '#1b1b1f' ? c : style.ink;
 }
 
-function draw(mol: Molecule, coords: Vec[], options: DepictOptions): Drawing {
-  const style = resolveStyle(options.style);
+function draw(
+  mol: Molecule,
+  coords: Vec[],
+  options: DepictOptions & { style: DrawStyle },
+  carbonLabels: Conventions['carbonLabels'],
+): Drawing {
+  const style = options.style;
   const L = style.bondLength;
   const lw = style.lineWidth * L;
   const spacing = style.bondSpacing * L;
   const margin = style.labelMargin * L;
   const P = coords.map((c) => vec(c.x * L, -c.y * L));
   const formula = options.formula ?? 'skeletal';
-  const carbonLabels = formula === 'skeletal' ? (options.carbonLabels ?? 'none') : 'all';
+  const heavyNeighbors = (i: number) => mol.neighbors(i).filter((n) => mol.atoms[n].element !== 'H');
+  /** The booklets write CH3 on O/S, terminal =CH2, and methyls on C=C carbons. */
+  const enemCarbonLabel = (i: number) => {
+    const nb = heavyNeighbors(i);
+    if (nb.length !== 1) return false;
+    const n = nb[0];
+    const el = mol.atoms[n].element;
+    if (el === 'O' || el === 'S') return true;
+    if (mol.bondBetween(i, n)!.order === 2) return true;
+    return (
+      el === 'C' &&
+      mol.adjacency[n].some((bi) => {
+        const b = mol.bonds[bi];
+        const o = mol.other(b, n);
+        return b.order === 2 && !b.aromatic && o !== i && mol.atoms[o].element === 'C';
+      })
+    );
+  };
 
   // ---- labels
   const labels: (AtomLabel | undefined)[] = mol.atoms.map(() => undefined);
@@ -184,10 +362,30 @@ function draw(mol: Molecule, coords: Vec[], options: DepictOptions): Drawing {
       atom.charge !== 0 ||
       atom.isotope !== undefined ||
       atom.label !== undefined ||
+      atom.abbreviation !== undefined ||
       carbonLabels === 'all' ||
-      (carbonLabels === 'terminal' && deg <= 1);
+      (carbonLabels === 'terminal' && deg <= 1) ||
+      (carbonLabels === 'enem' && enemCarbonLabel(atom.index));
     if (!show) continue;
     const bondAngles = mol.neighbors(atom.index).map((n) => angleOf(sub(coords[n], coords[atom.index])));
+    if (atom.abbreviation) {
+      // Read away from the bond: "COOH" when the bond comes from the left, "HOOC" otherwise.
+      const towardsRight = bondAngles.some((t) => Math.cos(t) > 0.3);
+      labels[atom.index] = layoutLabel(
+        {
+          atom: atom.index,
+          symbol: atom.element,
+          hydrogens: 0,
+          charge: 0,
+          color: labelColor(atom.element, style),
+          text: towardsRight ? { value: atom.abbreviation.left, anchor: 'last' } : { value: atom.abbreviation.right, anchor: 'first' },
+        },
+        P[atom.index],
+        'right',
+        style,
+      );
+      continue;
+    }
     let symbol = atom.label ?? (atom.element === '*' ? 'R' : atom.element);
     let symbolSubscript: string | undefined;
     const rMatch = /^R(\d+)$/.exec(symbol);
@@ -420,38 +618,159 @@ function draw(mol: Molecule, coords: Vec[], options: DepictOptions): Drawing {
     }
   }
 
+  // ---- callers address atoms of the molecule they passed in; map to drawn atoms
+  const drawnOf = new Map<number, number>();
+  for (const a of mol.atoms) {
+    if (a.source !== undefined && !drawnOf.has(a.source)) drawnOf.set(a.source, a.index);
+    for (const m of a.members ?? []) drawnOf.set(m, a.index);
+  }
+  const toDrawn = (list: number[] = []) => [...new Set(list.map((i) => drawnOf.get(i)).filter((i): i is number => i !== undefined))];
+
   // ---- highlights (drawn underneath)
   const underlay: Primitive[] = [];
   for (const hl of options.highlights ?? []) {
-    for (const bi of hl.bonds ?? []) {
+    const atomsHl = toDrawn(hl.atoms);
+    const set = new Set(atomsHl);
+    const bondsHl = hl.bonds ?? mol.bonds.filter((b) => set.has(b.a) && set.has(b.b)).map((b) => b.index);
+    for (const bi of bondsHl) {
       const bond = mol.bonds[bi];
       if (!bond) continue;
       underlay.push({ type: 'line', a: P[bond.a], b: P[bond.b], width: 0.34 * L, color: hl.color, bond: bi });
     }
-    for (const ai of hl.atoms ?? []) {
-      if (!P[ai]) continue;
+    for (const ai of atomsHl) {
       underlay.push({ type: 'circle', center: P[ai], r: 0.3 * L, width: 0, color: 'none', fill: hl.color, atom: ai });
     }
   }
 
   const finalLabels = labels.filter((l): l is AtomLabel => !!l);
   const atoms: AtomSite[] = mol.atoms.map((a) => ({
-    index: a.index,
+    index: a.source ?? -1,
     x: P[a.index].x,
     y: P[a.index].y,
     element: a.element,
     labelled: !!labels[a.index],
   }));
-  const viewBox = bounds(P, prims, underlay, finalLabels, style);
-  return { molecule: mol, style, viewBox, underlay, primitives: prims, labels: finalLabels, atoms };
+
+  // ---- annotations: dashed outline around each group, its name set in bold beside it
+  const outlines: OutlinePrim[] = [];
+  const texts: FreeText[] = [];
+  const fs = style.fontSize * L;
+  type Rect = { x1: number; y1: number; x2: number; y2: number };
+  const overlaps = (a: Rect, b: Rect) => a.x1 < b.x2 && a.x2 > b.x1 && a.y1 < b.y2 && a.y2 > b.y1;
+  const segHitsRect = (p: Vec, q: Vec, r: Rect) => {
+    for (let k = 0; k <= 8; k++) {
+      const x = p.x + ((q.x - p.x) * k) / 8;
+      const y = p.y + ((q.y - p.y) * k) / 8;
+      if (x > r.x1 && x < r.x2 && y > r.y1 && y < r.y2) return true;
+    }
+    return false;
+  };
+  const inside = (pt: Vec, poly: Vec[]) => {
+    let c = false;
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      const a = poly[i];
+      const b = poly[j];
+      if (a.y > pt.y !== b.y > pt.y && pt.x < ((b.x - a.x) * (pt.y - a.y)) / (b.y - a.y) + a.x) c = !c;
+    }
+    return c;
+  };
+  const anns = (options.annotations ?? []).map((ann) => ({ ann, group: toDrawn(ann.atoms) })).filter((g) => g.group.length);
+  const groupOfAtom = new Map<number, number>();
+  anns.forEach((g, gi) => g.group.forEach((a) => groupOfAtom.set(a, gi)));
+  const taken: Rect[] = [];
+  const mc = centroid(P);
+  anns.forEach(({ ann, group }, gi) => {
+    const pts: Vec[] = [];
+    for (const i of group) {
+      pts.push(P[i]);
+      for (const box of labels[i]?.boxes ?? []) pts.push(vec(box.x1, box.y1), vec(box.x2, box.y2), vec(box.x1, box.y2), vec(box.x2, box.y1));
+    }
+    const pad = 0.3 * L;
+    let hullPts = pts;
+    if (ann.label) {
+      const w = advance(ann.label) * fs * BOLD_WIDTH;
+      const h = FONT_METRICS.capHeight * fs;
+      const gc = centroid(group.map((i) => P[i]));
+      const away = sub(gc, mc);
+      const base = Math.hypot(away.x, away.y) < 1e-6 ? -Math.PI / 2 : Math.atan2(away.y, away.x);
+      const reach = Math.max(...pts.map((p) => Math.hypot(p.x - gc.x, p.y - gc.y)));
+      let best: { rect: Rect; score: number } | undefined;
+      for (let k = 0; k < 16; k++) {
+        const off = (k % 2 ? 1 : -1) * Math.ceil(k / 2) * (Math.PI / 8);
+        const t = base + off;
+        for (const extra of [0.2, 0.55]) {
+          const d = reach + extra * L + Math.abs(Math.cos(t)) * (w / 2) + Math.abs(Math.sin(t)) * (h / 2);
+          const cx = gc.x + Math.cos(t) * d;
+          const cy = gc.y + Math.sin(t) * d;
+          const rect = { x1: cx - w / 2 - 0.08 * L, x2: cx + w / 2 + 0.08 * L, y1: cy - h / 2 - 0.08 * L, y2: cy + h / 2 + 0.08 * L };
+          let score = Math.abs(off) * 0.15 + extra * 0.5;
+          P.forEach((p, i) => {
+            if (p.x > rect.x1 - 0.25 * L && p.x < rect.x2 + 0.25 * L && p.y > rect.y1 - 0.25 * L && p.y < rect.y2 + 0.25 * L) {
+              score += groupOfAtom.get(i) === gi ? 0.5 : 4;
+            }
+          });
+          for (const b of mol.bonds) if (segHitsRect(P[b.a], P[b.b], rect)) score += 3;
+          for (const l of finalLabels) for (const bx of l.boxes) if (overlaps(bx, rect)) score += 4;
+          for (const r of taken) if (overlaps(r, rect)) score += 6;
+          if (!best || score < best.score) best = { rect, score };
+        }
+      }
+      const r = best!.rect;
+      const cx = (r.x1 + r.x2) / 2;
+      const cy = (r.y1 + r.y2) / 2;
+      texts.push({ text: ann.label, x: cx, y: cy + h / 2, size: fs, weight: 700, anchor: 'middle' });
+      taken.push(r);
+      // Enclose the name too, unless that would swallow atoms of other groups.
+      const withLabel = [...pts, vec(r.x1, r.y1), vec(r.x2, r.y1), vec(r.x1, r.y2), vec(r.x2, r.y2)];
+      const hull = roundedHull(withLabel, pad);
+      const swallows = P.some((p, i) => !group.includes(i) && inside(p, hull));
+      if (!swallows) hullPts = withLabel;
+    }
+    const points = roundedHull(hullPts, pad);
+    outlines.push({
+      points,
+      width: lw * 0.85,
+      dash: [style.annotationDash[0] * L, style.annotationDash[1] * L],
+      color: style.annotationColor,
+    });
+  });
+
+  let viewBox = bounds(P, prims, underlay, finalLabels, style, outlines, texts);
+  // ---- caption: bold name centred under the structure, source line under it
+  if (options.caption || options.source) {
+    const pad = style.padding * L;
+    const cx = viewBox.x + viewBox.width / 2;
+    let y = viewBox.y + viewBox.height - pad + 0.75 * fs;
+    if (options.caption) {
+      y += FONT_METRICS.capHeight * fs;
+      texts.push({ text: options.caption, x: cx, y, size: fs, weight: 700, anchor: 'middle' });
+    }
+    if (options.source) {
+      y += 1.25 * fs;
+      texts.push({ text: options.source, x: cx, y, size: fs, weight: 400, anchor: 'middle' });
+    }
+    viewBox = bounds(P, prims, underlay, finalLabels, style, outlines, texts);
+  }
+  return { molecule: mol, style, viewBox, underlay, primitives: prims, labels: finalLabels, outlines, texts, atoms };
 }
+
+/** Arial Bold runs about 8% wider than the regular metrics used for labels. */
+const BOLD_WIDTH = 1.08;
 
 function distToLine(p: Vec, a: Vec, b: Vec): number {
   const u = norm(sub(b, a));
   return Math.abs(cross(u, sub(p, a)));
 }
 
-function bounds(P: Vec[], prims: Primitive[], underlay: Primitive[], labels: AtomLabel[], style: DrawStyle) {
+function bounds(
+  P: Vec[],
+  prims: Primitive[],
+  underlay: Primitive[],
+  labels: AtomLabel[],
+  style: DrawStyle,
+  outlines: OutlinePrim[] = [],
+  texts: FreeText[] = [],
+) {
   let minX = Infinity;
   let minY = Infinity;
   let maxX = -Infinity;
@@ -478,6 +797,13 @@ function bounds(P: Vec[], prims: Primitive[], underlay: Primitive[], labels: Ato
       grow(run.x, run.y - FONT_METRICS.ascender * run.size);
       grow(run.x + advance(run.text) * run.size, run.y - FONT_METRICS.descender * run.size * 0.4);
     }
+  }
+  for (const o of outlines) for (const p of o.points) grow(p.x, p.y, o.width);
+  for (const t of texts) {
+    const w = advance(t.text) * t.size * (t.weight >= 600 ? BOLD_WIDTH : 1);
+    const x0 = t.anchor === 'middle' ? t.x - w / 2 : t.x;
+    grow(x0, t.y - FONT_METRICS.ascender * t.size);
+    grow(x0 + w, t.y - FONT_METRICS.descender * t.size);
   }
   if (!Number.isFinite(minX)) {
     minX = minY = 0;

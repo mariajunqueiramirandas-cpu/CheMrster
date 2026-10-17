@@ -206,7 +206,7 @@ export function threeFormulas(rng: Rng): Exercise[] {
       { smiles: target.smiles, name: target.name },
       others.map((o) => ({ smiles: o.smiles, name: o.name })),
       `É o ${target.name}. Na fórmula de bastão cada vértice é um carbono, e os hidrogênios ficam subentendidos.`,
-      { smiles: target.smiles, formula: rng.pick(['structural', 'condensed'] as const) },
+      { smiles: target.smiles, formula: rng.pick(['structural', 'condensed', 'plana'] as const) },
     );
   };
   const toCondensed = () => {
@@ -588,7 +588,12 @@ export function everydayFunctions(rng: Rng): Exercise[] {
         .map((g) => `${cap(g.id)} (${FUNCTION_INFO[g.id].group})`)
         .filter((v, i, a) => a.indexOf(v) === i)
         .join('; ') + '.',
-      { smiles: entry.smiles, name: entry.name, caption: entry.note ? `${entry.name}: ${lowerFirst(entry.note)}` : entry.name },
+      {
+        smiles: entry.smiles,
+        name: entry.name,
+        caption: entry.name,
+        source: entry.note ? `(${lowerFirst(entry.note).replace(/\.$/, '')})` : undefined,
+      },
     );
   };
   const spot = () => {

@@ -40,6 +40,12 @@ export interface LabelSpec {
   /** Subscript appended to the symbol itself (R1, R2 ...). */
   symbolSubscript?: string;
   color: string;
+  /**
+   * Free label text such as "COOH" or "HOOC" (digits become subscripts, + and − become
+   * superscripts). The anchor letter sits on the atom: the first element of the text
+   * when it reads away to the right, the last one when it reads away to the left.
+   */
+  text?: { value: string; anchor: 'first' | 'last' };
 }
 
 /**
@@ -94,8 +100,52 @@ export function chargeText(charge: number): string {
   return Math.abs(charge) === 1 ? sign : `${Math.abs(charge)}${sign}`;
 }
 
+function layoutText(spec: LabelSpec & { text: NonNullable<LabelSpec['text']> }, at: Vec, style: DrawStyle): AtomLabel {
+  const fs = style.fontSize * style.bondLength;
+  const small = fs * style.subscriptScale;
+  const capH = FONT_METRICS.capHeight * fs;
+  const baseline = at.y + capH / 2;
+  type Piece = { text: string; kind: 'cap' | 'sub' | 'super' };
+  const pieces: Piece[] = [];
+  for (const ch of spec.text.value) {
+    const kind: Piece['kind'] = /\d/.test(ch) ? 'sub' : ch === '+' || ch === '\u2212' ? 'super' : 'cap';
+    const last = pieces[pieces.length - 1];
+    if (last && last.kind === kind) last.text += ch;
+    else pieces.push({ text: ch, kind });
+  }
+  // Offsets of every piece, and of the anchor element symbol inside the text.
+  let x = 0;
+  const placed = pieces.map((p) => {
+    const size = p.kind === 'cap' ? fs : small;
+    const item = { ...p, x, size };
+    x += advance(p.text) * size;
+    return item;
+  });
+  const symbols: Array<{ x: number; w: number }> = [];
+  for (const p of placed) {
+    if (p.kind !== 'cap') continue;
+    const re = /[A-Z][a-z]?/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(p.text))) {
+      symbols.push({ x: p.x + advance(p.text.slice(0, m.index)) * p.size, w: advance(m[0]) * p.size });
+    }
+  }
+  const anchor = spec.text.anchor === 'first' ? symbols[0] : symbols[symbols.length - 1];
+  const shift = at.x - (anchor ? anchor.x + anchor.w / 2 : x / 2);
+  const runs: TextRun[] = [];
+  const boxes: Box[] = [];
+  for (const p of placed) {
+    const y = p.kind === 'sub' ? baseline + 0.24 * fs : p.kind === 'super' ? baseline - 0.38 * fs : baseline;
+    const run = { text: p.text, x: p.x + shift, y, size: p.size };
+    runs.push(run);
+    boxes.push(runBox(run, p.kind));
+  }
+  return { atom: spec.atom, runs, boxes, color: spec.color };
+}
+
 /** Typeset a label centred on `at` (output px, y-down). */
 export function layoutLabel(spec: LabelSpec, at: Vec, side: HSide, style: DrawStyle): AtomLabel {
+  if (spec.text) return layoutText({ ...spec, text: spec.text }, at, style);
   const L = style.bondLength;
   const fs = style.fontSize * L;
   const sub = fs * style.subscriptScale;
