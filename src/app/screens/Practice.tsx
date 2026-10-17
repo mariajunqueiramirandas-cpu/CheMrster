@@ -2,13 +2,17 @@
  * The exercise player shared by lessons and reviews: one question at a time, check,
  * explanation, and missed questions coming back at the end.
  */
-import { type CSSProperties, useCallback, useEffect, useMemo, useState } from 'react';
+import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type Answer, hasAnswer, isCorrect } from '../../course/answers.ts';
 import type { ChoiceExercise, Exercise, MolSpec, PickStructureExercise, TapAtomsExercise } from '../../course/types.ts';
-import { CheckIcon, CloseIcon, CrossIcon } from '../components/Icons.tsx';
+import { LESSON_BY_ID } from '../../course/course.ts';
+import { saveToMap } from '../canvas-store.ts';
+import { CheckIcon, CloseIcon, CrossIcon, HintIcon, PinIcon, TutorIcon } from '../components/Icons.tsx';
 import { type AtomMark, MoleculeView } from '../components/MoleculeView.tsx';
 import { SchemeView, SpecView, isWide } from '../components/SchemeView.tsx';
-
-type Answer = number | number[] | null;
+import { typingIn } from '../hooks.ts';
+import { type AttemptSource, recordAttempt } from '../store.ts';
+import { ask } from '../tutor-store.ts';
 
 export interface PracticeItem {
   key: string;
@@ -26,11 +30,14 @@ export interface PracticeResult {
 
 export function Practice({
   items,
+  source,
   onExit,
   onFinish,
   label,
 }: {
   items: PracticeItem[];
+  /** Where the answers are logged as coming from. */
+  source: AttemptSource;
   onExit: () => void;
   onFinish: (result: PracticeResult) => void;
   /** Shown above the prompt, e.g. the lesson a review question comes from. */
@@ -46,10 +53,16 @@ export function Practice({
   const item = queue[index];
   const exercise = item?.exercise;
   const total = items.length;
+  // When the current question appeared, for study time.
+  const shownAt = useRef(Date.now());
+  useEffect(() => {
+    shownAt.current = Date.now();
+  }, [item?.key]);
 
   const check = useCallback(() => {
     if (!exercise || verdict !== null || !hasAnswer(answer)) return;
     const ok = isCorrect(exercise, answer);
+    recordAttempt({ lesson: item.lessonId, kind: exercise.kind, ok, retry: item.retry, ms: Date.now() - shownAt.current, source });
     setVerdict(ok);
     if (ok) {
       setSolved((s) => s + 1);
@@ -58,7 +71,7 @@ export function Practice({
       // Missed questions come back at the end.
       setQueue((q) => [...q, { ...item, key: `${item.key}r${q.length}`, retry: true }]);
     }
-  }, [exercise, verdict, answer, item]);
+  }, [exercise, verdict, answer, item, source]);
 
   const next = useCallback(() => {
     if (verdict === null) return;
@@ -78,7 +91,7 @@ export function Practice({
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Enter' || e.target instanceof HTMLButtonElement) return;
+      if (e.key !== 'Enter' || e.target instanceof HTMLButtonElement || typingIn(e)) return;
       if (verdict === null) check();
       else next();
     };
@@ -127,9 +140,18 @@ export function Practice({
         {verdict === null ? (
           <div className="lesson-foot-inner">
             {exercise.kind === 'tap' && <p className="lesson-hint">Toque nos átomos para marcar. Toque de novo para desmarcar.</p>}
-            <button type="button" className="btn btn--primary btn--wide" disabled={!hasAnswer(answer)} onClick={check}>
-              Verificar
-            </button>
+            <div className="lesson-foot-row">
+              <button
+                type="button"
+                className="btn btn--tutor"
+                onClick={() => ask({ text: 'Me dá uma dica, sem entregar a resposta?', screen: { kind: 'question', lessonId: item.lessonId, exercise }, about: aboutQuestion(item), open: true })}
+              >
+                <HintIcon /> Dica
+              </button>
+              <button type="button" className="btn btn--primary btn--wide" disabled={!hasAnswer(answer)} onClick={check}>
+                Verificar
+              </button>
+            </div>
           </div>
         ) : (
           <div className="lesson-foot-inner" role="status" aria-live="polite">
@@ -138,6 +160,25 @@ export function Practice({
               <div>
                 <p className="verdict-title">{verdict ? 'Correto' : correctAnswerText(exercise)}</p>
                 <p className="verdict-explain">{exercise.explain}</p>
+                <div className="verdict-actions">
+                  <button
+                    type="button"
+                    className="link-btn link-btn--tutor"
+                    onClick={() =>
+                      ask({
+                        text: verdict ? 'Por que essa é a resposta certa? Quero entender o raciocínio.' : 'Por que eu errei? Me explica o raciocínio certo.',
+                        screen: { kind: 'question', lessonId: item.lessonId, exercise, chosen: answer ?? undefined, correct: verdict },
+                        about: aboutQuestion(item),
+                        open: true,
+                      })
+                    }
+                  >
+                    <TutorIcon width={18} height={18} /> {verdict ? 'Entender melhor' : 'Por que errei?'}
+                  </button>
+                  <button type="button" className="link-btn" onClick={() => saveQuestion(item)}>
+                    <PinIcon width={18} height={18} /> Salvar no mapa
+                  </button>
+                </div>
               </div>
             </div>
             <button type="button" className="btn btn--primary btn--wide" onClick={next} autoFocus>
@@ -150,16 +191,20 @@ export function Practice({
   );
 }
 
-function hasAnswer(answer: Answer): boolean {
-  return Array.isArray(answer) ? answer.length > 0 : answer !== null;
-}
+const aboutQuestion = (item: PracticeItem) => `Questão de ${LESSON_BY_ID[item.lessonId]?.title ?? 'química'}`;
 
-function isCorrect(ex: Exercise, answer: Answer): boolean {
-  if (ex.kind === 'tap') {
-    const picked = [...((answer as number[]) ?? [])].sort((a, b) => a - b);
-    return picked.length === ex.answer.length && picked.every((a, i) => a === ex.answer[i]);
-  }
-  return answer === ex.answer;
+/** A question worth keeping goes to the concept map with its answer and explanation. */
+function saveQuestion(item: PracticeItem) {
+  const ex = item.exercise;
+  const answer =
+    ex.kind === 'choice' ? `**${ex.options[ex.answer]}**` : ex.kind === 'pick' ? 'a estrutura desenhada no cartão' : `átomos ${ex.answer.map((a) => a + 1).join(', ')}`;
+  saveToMap({
+    kind: 'question',
+    title: ex.prompt,
+    text: `Resposta: ${answer}\n\n${ex.explain}`,
+    smiles: ex.kind === 'pick' ? ex.options[ex.answer].smiles : ex.molecule?.smiles,
+    lessonId: item.lessonId,
+  });
 }
 
 function correctAnswerText(ex: Exercise): string {
@@ -325,6 +370,7 @@ function useNumberKeys(count: number, locked: boolean, onAnswer: (n: number) => 
   useEffect(() => {
     if (locked) return;
     const onKey = (e: KeyboardEvent) => {
+      if (typingIn(e)) return;
       const n = Number(e.key);
       if (Number.isInteger(n) && n >= 1 && n <= count) onAnswer(n - 1);
     };

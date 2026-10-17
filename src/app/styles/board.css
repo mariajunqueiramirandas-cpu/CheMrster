@@ -1,0 +1,578 @@
+/* The study board: index cards on bench troughs. */
+
+.board {
+  display: flex;
+  flex-direction: column;
+  height: calc(100dvh - var(--topbar-h) - var(--tabbar-h));
+  min-height: 480px;
+}
+
+.board-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px 20px;
+  max-width: 1200px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 12px var(--gutter) 14px;
+}
+
+.board-head h1 {
+  font-size: var(--step-3);
+  font-weight: 800;
+}
+
+.board-head p {
+  margin-top: 4px;
+  max-width: 56ch;
+  color: var(--muted);
+}
+
+.board-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.board-empty {
+  display: grid;
+  justify-items: start;
+  gap: 10px;
+  max-width: 1200px;
+  width: calc(100% - 2 * var(--gutter));
+  margin: 4px auto 16px;
+  padding: 20px;
+  border: 2px dashed var(--rule);
+  border-radius: 18px;
+}
+
+.board-empty h2 {
+  font-size: var(--step-2);
+}
+
+.board-empty p {
+  max-width: 60ch;
+  color: var(--muted);
+}
+
+.board-empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.board-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  scroll-padding: 0 var(--gutter);
+  overscroll-behavior-x: contain;
+}
+
+.board-scroll[hidden] {
+  display: none;
+}
+
+.board-cols {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: min(84vw, 320px);
+  gap: 12px;
+  height: 100%;
+  width: max-content;
+  margin: 0 auto;
+  padding: 0 var(--gutter) 12px;
+}
+
+@media (min-width: 1000px) {
+  .board-scroll {
+    scroll-snap-type: none;
+  }
+  .board-cols {
+    grid-auto-columns: minmax(0, 1fr);
+    width: 100%;
+    max-width: 1200px;
+  }
+}
+
+.col {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 12px 10px 10px;
+  border-radius: 18px;
+  background: var(--bench-deep);
+  scroll-snap-align: start;
+  transition: box-shadow 120ms ease;
+}
+
+.col.is-over {
+  box-shadow: inset 0 0 0 2px var(--magenta);
+}
+
+.col-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 0 0 6px;
+}
+
+.col-head h2 {
+  font-size: var(--step-1);
+}
+
+.col-count {
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--bench);
+  color: var(--muted);
+  font-size: var(--step--1);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.col-count--over {
+  background: var(--amber-wash);
+  color: var(--amber);
+}
+
+.col-head .icon-btn {
+  margin-left: auto;
+  width: 36px;
+  height: 36px;
+}
+
+.col-hint {
+  padding: 0 6px 10px;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.col-cards {
+  flex: 1;
+  min-height: 60px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 2px 2px 8px;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.col-empty {
+  padding: 14px;
+  border: 2px dashed var(--rule);
+  border-radius: 12px;
+  color: var(--muted);
+  font-size: var(--step--1);
+  text-align: center;
+}
+
+.col-slot {
+  display: grid;
+  gap: 8px;
+}
+
+.drop-line {
+  display: block;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--magenta);
+}
+
+/* ---------- cards ---------- */
+
+.card {
+  position: relative;
+  display: grid;
+  gap: 6px;
+  padding: 12px 12px 10px 14px;
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 1px 0 rgb(30 42 54 / 0.08), 0 2px 0 var(--rule);
+  cursor: grab;
+  touch-action: pan-x pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.card:focus-visible {
+  outline: 3px solid var(--cobalt);
+}
+
+/* A colour tag is a strip down the left edge, like a marked index card. */
+.card::before {
+  content: '';
+  position: absolute;
+  inset: 8px auto 8px 0;
+  width: 4px;
+  border-radius: 0 4px 4px 0;
+  background: transparent;
+}
+
+.card--magenta::before {
+  background: var(--magenta);
+}
+
+.card--cobalt::before {
+  background: var(--cobalt);
+}
+
+.card--green::before {
+  background: var(--right);
+}
+
+.card--amber::before {
+  background: var(--amber);
+}
+
+.card--lifted {
+  opacity: 0.35;
+}
+
+.card-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.card h3 {
+  font-family: var(--font-ui);
+  font-size: var(--step-0);
+  font-weight: 700;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.card-tile {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  font-weight: 800;
+}
+
+.card-tile.ptile--nova {
+  border: 2px dashed var(--rule);
+  color: var(--muted);
+}
+
+.card-tile.ptile--fraca {
+  background: var(--heat-1);
+  color: var(--heat-ink-1);
+}
+
+.card-tile.ptile--media {
+  background: var(--heat-2);
+  color: var(--heat-ink-2);
+}
+
+.card-tile.ptile--forte {
+  background: var(--heat-3);
+  color: var(--heat-ink-3);
+}
+
+.card-notes {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: var(--step--1);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+}
+
+.card-level {
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.card-due,
+.card-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--bench);
+  font-weight: 700;
+}
+
+.card-due--late {
+  background: var(--wrong-wash);
+  color: var(--wrong);
+}
+
+.card-due--soon {
+  background: var(--amber-wash);
+  color: var(--amber);
+}
+
+.card-go {
+  margin-left: auto;
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 2px solid var(--magenta);
+  color: var(--magenta);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.card-ghost {
+  position: fixed;
+  z-index: 50;
+  pointer-events: none;
+  transform: rotate(2deg);
+}
+
+.card-ghost .card {
+  box-shadow: 0 18px 36px -14px rgb(0 0 0 / 0.45);
+  cursor: grabbing;
+}
+
+.board--dragging,
+.board--dragging * {
+  cursor: grabbing;
+}
+
+.card--new {
+  cursor: default;
+}
+
+.card--new input {
+  width: 100%;
+  min-height: 40px;
+  padding: 6px 8px;
+  border: 2px solid var(--rule);
+  border-radius: 8px;
+  background: var(--bench);
+  color: var(--text);
+  font: inherit;
+}
+
+.card-new-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.board-keys {
+  display: none;
+  padding: 0 var(--gutter) 10px;
+  color: var(--muted);
+  font-size: 0.75rem;
+  text-align: center;
+}
+
+@media (min-width: 1000px) and (hover: hover) {
+  .board-keys {
+    display: block;
+  }
+}
+
+/* ---------- card editor ---------- */
+
+.card-editor {
+  display: grid;
+  gap: 14px;
+  width: min(560px, calc(100% - 24px));
+  max-height: calc(100dvh - 24px);
+  overflow-y: auto;
+}
+
+.card-editor[open] {
+  display: grid;
+}
+
+.card-editor:not([open]) {
+  display: none;
+}
+
+.card-editor-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.card-editor-title {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 2px solid transparent;
+  border-radius: 10px;
+  background: none;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: var(--step-1);
+  font-weight: 700;
+}
+
+.card-editor-title:hover,
+.card-editor-title:focus {
+  border-color: var(--rule);
+  outline: none;
+}
+
+.card-editor-cols {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (min-width: 520px) {
+  .card-editor-cols {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.card-editor-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.field-input--plain {
+  font-family: var(--font-ui);
+  font-size: var(--step-0);
+}
+
+textarea.field-input {
+  resize: vertical;
+  min-height: 72px;
+}
+
+.color-pick {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.color-pick legend {
+  float: left;
+  margin-right: 8px;
+}
+
+.color-dot {
+  position: relative;
+  display: inline-block;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid var(--rule);
+  cursor: pointer;
+}
+
+.color-dot input {
+  position: absolute;
+  opacity: 0;
+  inset: 0;
+  margin: 0;
+  cursor: pointer;
+}
+
+.color-dot:has(input:checked) {
+  outline: 3px solid var(--text);
+  outline-offset: 2px;
+}
+
+.color-dot:has(input:focus-visible) {
+  outline: 3px solid var(--cobalt);
+  outline-offset: 2px;
+}
+
+.color-dot--none {
+  background: var(--surface);
+}
+
+.color-dot--magenta {
+  background: var(--magenta);
+  border-color: transparent;
+}
+
+.color-dot--cobalt {
+  background: var(--cobalt);
+  border-color: transparent;
+}
+
+.color-dot--green {
+  background: var(--right);
+  border-color: transparent;
+}
+
+.color-dot--amber {
+  background: var(--amber);
+  border-color: transparent;
+}
+
+.checklist {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.checklist li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.checklist label {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  cursor: pointer;
+}
+
+.checklist input[type='checkbox'] {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--magenta);
+}
+
+.checklist .is-done {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
+.checklist-add {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.checklist-add .field-input {
+  min-height: 40px;
+}
+
+.sheet-actions--row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.btn--danger {
+  color: var(--wrong);
+}

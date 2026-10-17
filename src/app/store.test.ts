@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { type Progress, daysSince, dayKey, dueLessons, nextBox, nextReviewIn } from './store.ts';
 
 const day = (y: number, m: number, d: number, h = 12) => new Date(y, m - 1, d, h);
-const progress = (completed: Progress['completed']): Progress => ({ xp: 0, completed, streak: { count: 0, last: null } });
+const progress = (completed: Progress['completed']): Progress => ({ xp: 0, completed, streak: { count: 0, last: null }, days: {}, log: [] });
 
 describe('spaced review', () => {
   it('moves lessons between Leitner boxes', () => {

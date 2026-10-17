@@ -5,6 +5,7 @@ import { createRng } from '../../course/random.ts';
 import { buildReview } from '../../course/review.ts';
 import { ElementTile } from '../components/ElementTile.tsx';
 import { BoltIcon } from '../components/Icons.tsx';
+import { syncAfterPractice } from '../board-store.ts';
 import { navigate } from '../router.ts';
 import { INTERVALS, dueLessons, recordReview, useProgress } from '../store.ts';
 import { Practice, type PracticeItem, type PracticeResult } from './Practice.tsx';
@@ -39,10 +40,12 @@ export function ReviewScreen() {
   return (
     <Practice
       items={items}
+      source="review"
       onExit={exit}
       label={(item) => LESSON_BY_ID[item.lessonId]?.title}
       onFinish={(r) => {
         recordReview(r.byLesson, XP_PER_LESSON * Object.keys(r.byLesson).length);
+        syncAfterPractice(Object.keys(r.byLesson));
         setResult(r);
       }}
     />
