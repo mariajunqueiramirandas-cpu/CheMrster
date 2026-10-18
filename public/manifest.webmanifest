@@ -1,0 +1,23 @@
+{
+  "name": "CheMrster — Química para o ENEM",
+  "short_name": "CheMrster",
+  "description": "Química orgânica para o ENEM, do zero ao herói, com estruturas desenhadas como num livro impresso.",
+  "lang": "pt-BR",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#E8ECEF",
+  "theme_color": "#E8ECEF",
+  "categories": ["education"],
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" },
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Revisão do dia", "url": "/#/revisao" },
+    { "name": "Perguntar ao tutor", "url": "/#/tutor" },
+    { "name": "Mapa", "url": "/#/mapa" }
+  ]
+}

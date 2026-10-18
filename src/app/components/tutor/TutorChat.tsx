@@ -198,7 +198,7 @@ export function TutorChat({ threadId, onThread, autoFocus }: { threadId?: string
   // Follow the reply as it streams, unless the learner scrolled up to read.
   useLayoutEffect(() => {
     const el = scroller.current;
-    if (el && stick.current) el.scrollTop = el.scrollHeight;
+    if (el && stick.current && turns.length) el.scrollTop = el.scrollHeight;
   });
 
   useEffect(() => {
@@ -276,6 +276,7 @@ export function TutorChat({ threadId, onThread, autoFocus }: { threadId?: string
           id={`composer-${threadId ?? 'new'}`}
           ref={input}
           rows={1}
+          enterKeyHint="send"
           value={draft}
           placeholder={busy ? 'O tutor está respondendo…' : 'Pergunte ao tutor'}
           onChange={(e) => {

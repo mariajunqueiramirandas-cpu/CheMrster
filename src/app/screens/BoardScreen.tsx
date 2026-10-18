@@ -10,6 +10,7 @@ import { LEVEL_LABEL, daysUntil, masteryAll } from '../../study/progress.ts';
 import { createCard, editBoard, seedBoard, syncOnVisit, useBoard } from '../board-store.ts';
 import { CheckIcon, CloseIcon, PlusIcon, TrashIcon, TutorIcon } from '../components/Icons.tsx';
 import { uid } from '../persist.ts';
+import { dismissSheet, useSheet } from '../mobile.ts';
 import { href, navigate } from '../router.ts';
 import { useProgress } from '../store.ts';
 import { toast } from '../toast.ts';
@@ -424,24 +425,21 @@ function NewCard({ column, onDone }: { column: ColumnId; onDone: () => void }) {
 }
 
 function CardEditor({ card, onClose }: { card: BoardCard; onClose: () => void }) {
-  const ref = useRef<HTMLDialogElement>(null);
+  const ref = useSheet();
   const board = useBoard();
   const col = columnOf(board, card.id) ?? 'todo';
   const [item, setItem] = useState('');
-  useEffect(() => {
-    if (ref.current && !ref.current.open) ref.current.showModal();
-  }, []);
   const patch = (p: Partial<BoardCard>) => editBoard((b) => updateCard(b, card.id, p));
   const lesson = card.lessonId ? LESSON_BY_ID[card.lessonId] : undefined;
 
   return (
-    <dialog ref={ref} className="sheet card-editor" onClose={onClose} onClick={(e) => e.target === ref.current && ref.current?.close()} aria-labelledby="card-title">
+    <dialog ref={ref} className="sheet card-editor" onClose={onClose} aria-labelledby="card-title">
       <div className="card-editor-head">
         <label className="sr-only" htmlFor="card-title">
           Título
         </label>
         <input id="card-title" className="card-editor-title" value={card.title} onChange={(e) => patch({ title: e.target.value })} />
-        <button type="button" className="icon-btn" onClick={() => ref.current?.close()} aria-label="Fechar">
+        <button type="button" className="icon-btn" onClick={() => dismissSheet(ref.current)} aria-label="Fechar">
           <CloseIcon />
         </button>
       </div>

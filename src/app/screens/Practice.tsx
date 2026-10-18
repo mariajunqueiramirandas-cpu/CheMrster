@@ -11,6 +11,7 @@ import { CheckIcon, CloseIcon, CrossIcon, HintIcon, PinIcon, TutorIcon } from '.
 import { type AtomMark, MoleculeView } from '../components/MoleculeView.tsx';
 import { SchemeView, SpecView, isWide } from '../components/SchemeView.tsx';
 import { typingIn } from '../hooks.ts';
+import { dismissSheet, haptic, useSheet } from '../mobile.ts';
 import { type AttemptSource, recordAttempt } from '../store.ts';
 import { ask } from '../tutor-store.ts';
 
@@ -49,6 +50,13 @@ export function Practice({
   const [verdict, setVerdict] = useState<boolean | null>(null);
   const [solved, setSolved] = useState(0);
   const [firstTry, setFirstTry] = useState<Record<string, number>>({});
+  const [leaving, setLeaving] = useState(false);
+  // One stray tap on the close button should not throw away a lesson half done.
+  const exit = () => (solved > 0 || verdict !== null || index > 0 ? setLeaving(true) : onExit());
+  const choose = useCallback((a: Answer) => {
+    haptic('tap');
+    setAnswer(a);
+  }, []);
 
   const item = queue[index];
   const exercise = item?.exercise;
@@ -64,6 +72,7 @@ export function Practice({
     const ok = isCorrect(exercise, answer);
     recordAttempt({ lesson: item.lessonId, kind: exercise.kind, ok, retry: item.retry, ms: Date.now() - shownAt.current, source });
     setVerdict(ok);
+    haptic(ok ? 'success' : 'error');
     if (ok) {
       setSolved((s) => s + 1);
       if (!item.retry) setFirstTry((f) => ({ ...f, [item.lessonId]: (f[item.lessonId] ?? 0) + 1 }));
@@ -105,7 +114,7 @@ export function Practice({
   return (
     <div className="lesson">
       <header className="lesson-bar">
-        <button type="button" className="icon-btn" onClick={onExit} aria-label="Sair">
+        <button type="button" className="icon-btn" onClick={exit} aria-label="Sair">
           <CloseIcon />
         </button>
         <div className="lesson-meter" role="progressbar" aria-label="Progresso" aria-valuemin={0} aria-valuemax={total} aria-valuenow={solved}>
@@ -126,13 +135,13 @@ export function Practice({
         )}
         <h1 className="lesson-prompt">{exercise.prompt}</h1>
         {exercise.kind === 'choice' && (
-          <ChoiceView exercise={exercise} answer={answer as number | null} onAnswer={setAnswer} verdict={verdict} />
+          <ChoiceView exercise={exercise} answer={answer as number | null} onAnswer={choose} verdict={verdict} />
         )}
         {exercise.kind === 'pick' && (
-          <PickView exercise={exercise} answer={answer as number | null} onAnswer={setAnswer} verdict={verdict} />
+          <PickView exercise={exercise} answer={answer as number | null} onAnswer={choose} verdict={verdict} />
         )}
         {exercise.kind === 'tap' && (
-          <TapView exercise={exercise} answer={(answer as number[] | null) ?? []} onAnswer={setAnswer} verdict={verdict} />
+          <TapView exercise={exercise} answer={(answer as number[] | null) ?? []} onAnswer={choose} verdict={verdict} />
         )}
       </main>
 
@@ -187,7 +196,26 @@ export function Practice({
           </div>
         )}
       </footer>
+      {leaving && <LeaveSheet onStay={() => setLeaving(false)} onLeave={onExit} />}
     </div>
+  );
+}
+
+function LeaveSheet({ onStay, onLeave }: { onStay: () => void; onLeave: () => void }) {
+  const ref = useSheet();
+  return (
+    <dialog ref={ref} className="sheet leave-sheet" onClose={onStay} aria-labelledby="leave-title">
+      <h2 id="leave-title">Sair agora?</h2>
+      <p>O que você respondeu até aqui conta para o seu progresso, mas a lição só fica concluída quando você chega ao fim.</p>
+      <div className="sheet-actions">
+        <button type="button" className="btn btn--primary" onClick={() => dismissSheet(ref.current)} autoFocus>
+          Continuar estudando
+        </button>
+        <button type="button" className="btn btn--quiet btn--danger" onClick={onLeave}>
+          Sair da lição
+        </button>
+      </div>
+    </dialog>
   );
 }
 

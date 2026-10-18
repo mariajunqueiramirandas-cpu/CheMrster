@@ -154,11 +154,75 @@ button {
   white-space: nowrap;
 }
 
+/* ---------- touch ---------- */
+
+/* Built for thumbs first: no grey tap flash, no 300 ms wait, no zoom on a double tap. */
+html {
+  -webkit-tap-highlight-color: transparent;
+}
+
+a,
+button,
+label,
+summary,
+select,
+input,
+textarea,
+[role='button'] {
+  touch-action: manipulation;
+}
+
+button,
+.btn,
+.tabbar,
+.tabs,
+.option,
+.tile,
+.pick {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* iOS zooms the page into any field under 16px; nothing here is worth that jolt. */
+@media (pointer: coarse) {
+  input:not([type='checkbox']):not([type='radio']):not([type='range']),
+  textarea,
+  select {
+    font-size: max(16px, 1em) !important;
+  }
+}
+
+/* A sheet or dialog holds the page still underneath it. */
+html:has(dialog[open]) {
+  overflow: hidden;
+}
+
+/* Installed to the home screen it should feel like an app: no rubber-band page, no pull to refresh. */
+@media (display-mode: standalone) {
+  html,
+  body {
+    overscroll-behavior-y: none;
+  }
+}
+
 /* ---------- shell ---------- */
 
 :root {
-  --topbar-h: 64px;
-  --tabbar-h: calc(66px + env(safe-area-inset-bottom));
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --topbar-row: 56px;
+  --topbar-h: calc(var(--topbar-row) + var(--safe-top));
+  --tabbar-row: 62px;
+  --tabbar-h: calc(var(--tabbar-row) + var(--safe-bottom));
+  --gutter: max(16px, env(safe-area-inset-left, 0px), env(safe-area-inset-right, 0px));
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-spring: cubic-bezier(0.3, 1.4, 0.5, 1);
+}
+
+/* The keyboard is up: the tab bar steps aside, as in native apps. */
+:root.kb-open {
+  --tabbar-h: 0px;
 }
 
 .shell {
@@ -170,15 +234,32 @@ button {
   position: sticky;
   top: 0;
   z-index: 20;
-  background: var(--bench);
+  padding-top: var(--safe-top);
+  background: color-mix(in srgb, var(--bench) 88%, transparent);
+  -webkit-backdrop-filter: saturate(1.6) blur(14px);
+  backdrop-filter: saturate(1.6) blur(14px);
+  transition: transform 240ms var(--ease-out);
+  view-transition-name: topbar;
+}
+
+/* Reading down a long page, the top bar gets out of the way; any scroll up brings it back. */
+@media (max-width: 899px) {
+  .topbar--hidden {
+    transform: translateY(-100%);
+  }
+  .shell--canvas .topbar--hidden,
+  .shell--board .topbar--hidden,
+  .shell--tutor .topbar--hidden {
+    transform: none;
+  }
 }
 
 .topbar-inner {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   max-width: 1200px;
-  height: var(--topbar-h);
+  height: var(--topbar-row);
   margin: 0 auto;
   padding: 0 var(--gutter);
 }
@@ -194,131 +275,210 @@ button {
 
 .stats {
   display: flex;
-  gap: 14px;
+  gap: 6px;
 }
 
 .stat {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  min-height: 36px;
+  padding: 0 10px 0 8px;
+  border-radius: 999px;
+  background: var(--bench-deep);
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
   color: var(--muted);
   text-decoration: none;
+}
+
+.stat svg {
+  width: 18px;
+  height: 18px;
 }
 
 .stat--hot {
   color: var(--magenta);
+  background: var(--magenta-wash);
 }
 
-.tabs {
+/* Phones: the sections live in the tab bar under the thumb, the top bar only says where you are. */
+.tabs,
+.topbar .topbar-tutor,
+.topbar .topbar-settings {
+  display: none;
+}
+
+.tabbar {
   position: fixed;
   inset: auto 0 0 0;
-  z-index: 20;
-  display: flex;
-  justify-content: center;
-  gap: 2px;
+  z-index: 30;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  align-items: stretch;
   height: var(--tabbar-h);
-  padding: 6px 6px env(safe-area-inset-bottom);
-  background: var(--bench);
-  border-top: 2px solid var(--bench-deep);
+  padding: 0 max(4px, env(safe-area-inset-left, 0px)) var(--safe-bottom) max(4px, env(safe-area-inset-right, 0px));
+  background: color-mix(in srgb, var(--bench) 94%, transparent);
+  -webkit-backdrop-filter: saturate(1.6) blur(16px);
+  backdrop-filter: saturate(1.6) blur(16px);
+  border-top: 1px solid var(--bench-deep);
+  transition: transform 200ms var(--ease-out);
+  view-transition-name: tabbar;
 }
 
-.tabs a {
-  flex: 1 1 0;
-  max-width: 120px;
-  min-width: 0;
+:root.kb-open .tabbar {
+  transform: translateY(100%);
+  visibility: hidden;
+}
+
+.tabbar > a,
+.tabbar > button {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
-  padding: 4px 2px;
-  border-radius: 12px;
-  font-size: 0.72rem;
-  font-weight: 700;
-  text-decoration: none;
-  color: var(--muted);
-  white-space: nowrap;
-}
-
-.tabs a span {
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.tabs a[aria-current='page'] {
-  color: var(--magenta);
-  background: var(--magenta-wash);
-}
-
-.topbar .icon-btn {
-  flex: none;
-}
-
-/* The tutor is one tap away on every screen. */
-.tutor-fab {
-  position: fixed;
-  right: max(16px, env(safe-area-inset-right));
-  bottom: calc(var(--tabbar-h) + 14px);
-  z-index: 19;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 52px;
-  padding: 0 20px 0 16px;
+  gap: 3px;
+  min-width: 0;
+  padding: 6px 2px 4px;
   border: 0;
-  border-radius: 999px;
-  background: var(--cobalt);
-  color: #fff;
+  background: none;
+  color: var(--muted);
+  font-size: 0.7rem;
   font-weight: 700;
-  box-shadow: 0 10px 24px -10px rgb(20 40 120 / 0.65);
+  letter-spacing: 0.01em;
+  text-decoration: none;
+  white-space: nowrap;
   cursor: pointer;
 }
 
-.tutor-fab:active {
-  transform: translateY(2px);
+.tabbar > a svg,
+.tabbar > button > svg {
+  width: 24px;
+  height: 24px;
+  transition: transform 220ms var(--ease-spring);
 }
 
-.topbar .topbar-tutor {
-  display: none;
+/* The active tab: its icon sits in a magenta pill, Material-style, so it reads at a glance. */
+.tabbar > a::before,
+.tabbar > button:not(.tabbar-tutor)::before {
+  content: '';
+  position: absolute;
+  top: 5px;
+  left: 50%;
+  width: 56px;
+  height: 30px;
+  margin-left: -28px;
+  border-radius: 999px;
+  background: var(--magenta-wash);
+  opacity: 0;
+  transform: scaleX(0.4);
+  transition:
+    opacity 180ms ease,
+    transform 260ms var(--ease-spring);
+}
+
+.tabbar > a > *,
+.tabbar > button > * {
+  position: relative;
+}
+
+.tabbar [aria-current='page'] {
+  color: var(--magenta);
+}
+
+.tabbar > [aria-current='page']:not(.tabbar-tutor)::before {
+  opacity: 1;
+  transform: none;
+}
+
+.tabbar > a:active svg,
+.tabbar > button:active > svg {
+  transform: scale(0.86);
+}
+
+/* The tutor: the one action that is always there, raised in the middle of the bar. */
+.tabbar-tutor {
+  color: var(--cobalt) !important;
+}
+
+.tabbar-tutor-disc {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  margin-top: -26px;
+  border-radius: 50%;
+  border: 4px solid var(--bench);
+  background: var(--cobalt);
+  color: #fff;
+  box-shadow: 0 10px 22px -10px rgb(20 40 120 / 0.7);
+  transition: transform 220ms var(--ease-spring);
+}
+
+.tabbar-tutor-disc svg {
+  width: 24px;
+  height: 24px;
+}
+
+.tabbar-tutor:active .tabbar-tutor-disc {
+  transform: scale(0.9);
 }
 
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) .tutor-fab {
+  :root:not([data-theme='light']) .tabbar-tutor-disc {
     color: #0d1530;
   }
 }
 
-:root[data-theme='dark'] .tutor-fab {
+:root[data-theme='dark'] .tabbar-tutor-disc {
   color: #0d1530;
 }
 
 @media (min-width: 900px) {
   :root {
     --tabbar-h: 0px;
+    --topbar-row: 64px;
+  }
+  .tabbar {
+    display: none;
+  }
+  .topbar {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background: var(--bench);
   }
   .tabs {
-    position: static;
-    height: auto;
-    padding: 0;
-    border: 0;
-    background: none;
+    display: flex;
+    gap: 2px;
     margin-right: auto;
   }
   .tabs a {
-    flex: 0 0 auto;
-    max-width: none;
-    flex-direction: row;
+    display: flex;
+    align-items: center;
     gap: 6px;
     padding: 8px 12px;
+    border-radius: 12px;
     font-size: var(--step--1);
+    font-weight: 700;
+    text-decoration: none;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .tabs a[aria-current='page'] {
+    color: var(--magenta);
+    background: var(--magenta-wash);
   }
   .wordmark {
     margin-right: 12px;
   }
-  .tutor-fab {
-    display: none;
+  .stat {
+    background: none;
+    padding: 0 4px;
+  }
+  .topbar .topbar-settings {
+    display: inline-grid;
+    flex: none;
   }
   .topbar .topbar-tutor {
     display: inline-flex;
@@ -344,18 +504,11 @@ button {
 .page {
   max-width: var(--column);
   margin: 0 auto;
-  padding: 8px var(--gutter) 48px;
+  padding: 8px var(--gutter) 32px;
 }
 
 .page--wide {
   max-width: 1080px;
-}
-
-/* Room under the last thing on the page for the tutor button. */
-@media (max-width: 899px) {
-  .page:not(.page--full) {
-    padding-bottom: 96px;
-  }
 }
 
 .page--full {
@@ -363,12 +516,300 @@ button {
   padding: 0;
 }
 
+/* ---------- screen changes ---------- */
+
+/* Tabs crossfade with a short lift; practice slides up over the app and back down. The bars stay put. */
+@media (prefers-reduced-motion: no-preference) {
+  ::view-transition-group(root) {
+    animation-duration: 220ms;
+  }
+  html[data-vt='fade']::view-transition-old(root) {
+    animation: vt-fade-out 120ms ease-in both;
+  }
+  html[data-vt='fade']::view-transition-new(root) {
+    animation: vt-fade-in 220ms var(--ease-out) both;
+  }
+  html[data-vt='up']::view-transition-old(root) {
+    animation: vt-fade-out 260ms ease both;
+  }
+  html[data-vt='up']::view-transition-new(root) {
+    animation: vt-slide-up 320ms var(--ease-out) both;
+  }
+  html[data-vt='down']::view-transition-old(root) {
+    animation: vt-slide-down 260ms cubic-bezier(0.4, 0, 1, 1) both;
+    z-index: 1;
+  }
+  html[data-vt='down']::view-transition-new(root) {
+    animation: vt-fade-in 260ms ease both;
+  }
+  ::view-transition-old(topbar),
+  ::view-transition-new(topbar),
+  ::view-transition-old(tabbar),
+  ::view-transition-new(tabbar) {
+    animation: none;
+  }
+}
+
+@keyframes vt-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes vt-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@keyframes vt-slide-up {
+  from {
+    transform: translateY(40%);
+    opacity: 0;
+  }
+}
+
+@keyframes vt-slide-down {
+  to {
+    transform: translateY(40%);
+    opacity: 0;
+  }
+}
+
+/* ---------- loading ---------- */
+
+.page-loading {
+  display: grid;
+  gap: 14px;
+  max-width: var(--column);
+  margin: 0 auto;
+  padding: 16px var(--gutter);
+  color: var(--muted);
+  text-align: center;
+}
+
+.skeleton {
+  display: block;
+  border-radius: 10px;
+  background: linear-gradient(90deg, var(--bench-deep) 0 40%, var(--surface) 50%, var(--bench-deep) 60% 100%) 0 0 / 300% 100%;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .skeleton {
+    animation: shimmer 1.3s linear infinite;
+  }
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}
+
+.skeleton--title {
+  width: 60%;
+  height: 34px;
+}
+
+.skeleton--line {
+  height: 16px;
+}
+
+.skeleton--short {
+  width: 40%;
+}
+
+.skeleton--block {
+  height: 180px;
+  margin-top: 8px;
+  border-radius: 16px;
+}
+
+/* ---------- "Mais" ---------- */
+
+.more-sheet[open] {
+  display: grid;
+  gap: 14px;
+}
+
+.more-today {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  align-items: center;
+  gap: 8px 14px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: var(--bench);
+  text-decoration: none;
+}
+
+.more-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+}
+
+.more-stat strong {
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: var(--step-1);
+}
+
+.more-stat:first-child svg {
+  color: var(--magenta);
+}
+
+.more-goal {
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+  font-size: var(--step--1);
+  text-align: right;
+}
+
+.more-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.more-list a {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 60px;
+  padding: 6px 4px;
+  border-radius: 14px;
+  text-decoration: none;
+}
+
+.more-list a:active {
+  background: var(--bench);
+}
+
+.more-list li + li a {
+  border-top: 1px solid var(--bench-deep);
+  border-radius: 0;
+}
+
+.more-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: var(--magenta-wash);
+  color: var(--magenta);
+}
+
+.more-text {
+  flex: 1;
+  display: grid;
+  min-width: 0;
+}
+
+.more-text span {
+  color: var(--muted);
+  font-size: var(--step--1);
+}
+
+.more-chevron {
+  flex: none;
+  color: var(--muted);
+}
+
+/* ---------- continue where you left off ---------- */
+
+.path-continue {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--tabbar-h) + 14px);
+  z-index: 19;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: min(420px, calc(100% - 2 * var(--gutter)));
+  min-height: 60px;
+  padding: 8px 18px 8px 8px;
+  border: 0;
+  border-radius: 18px;
+  background: var(--magenta);
+  color: #fff;
+  box-shadow:
+    0 4px 0 var(--magenta-press),
+    0 16px 30px -14px rgb(120 10 70 / 0.6);
+  text-align: left;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 24px) scale(0.96);
+  transition:
+    opacity 180ms ease,
+    transform 260ms var(--ease-spring);
+}
+
+.path-continue.is-shown {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translate(-50%, 0);
+}
+
+.path-continue:active {
+  transform: translate(-50%, 3px);
+  box-shadow: 0 1px 0 var(--magenta-press);
+}
+
+.path-continue-tile {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: #fff;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: 1.3rem;
+  font-weight: 800;
+}
+
+.path-continue-text {
+  flex: 1;
+  display: grid;
+  min-width: 0;
+  line-height: 1.25;
+}
+
+.path-continue-text span {
+  font-size: var(--step--1);
+  opacity: 0.85;
+}
+
+.path-continue-text strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (min-width: 900px) {
+  .path-continue {
+    display: none;
+  }
+}
+
 /* ---------- toasts ---------- */
 
 .toasts {
   position: fixed;
   left: 50%;
-  bottom: calc(var(--tabbar-h) + 80px);
+  bottom: calc(var(--tabbar-h) + 12px);
   z-index: 60;
   display: grid;
   gap: 8px;
@@ -558,8 +999,10 @@ button {
   cursor: pointer;
 }
 
-.mol-target:hover {
-  fill: rgb(36 72 200 / 0.08);
+@media (hover: hover) {
+  .mol-target:hover {
+    fill: rgb(36 72 200 / 0.08);
+  }
 }
 
 .mol-target:focus {
@@ -818,19 +1261,96 @@ button.tile:active {
 
 /* ---------- lesson sheet ---------- */
 
+/* Phones: a bottom sheet with a grabber, flush with the screen edge and above the home bar. */
 .sheet {
-  width: min(520px, calc(100% - 24px));
-  margin: auto auto 12px;
-  padding: 20px;
+  position: fixed;
+  inset: auto 0 var(--kb, 0px) 0;
+  width: 100%;
+  max-width: 100%;
+  max-height: calc(var(--vvh, 100dvh) - var(--safe-top) - 24px);
+  margin: 0;
+  padding: 26px var(--gutter) calc(18px + var(--safe-bottom));
+  overflow-y: auto;
+  overscroll-behavior: contain;
   border: 0;
-  border-radius: 20px;
+  border-radius: 24px 24px 0 0;
   background: var(--surface);
   color: var(--text);
-  box-shadow: 0 20px 50px -20px rgb(0 0 0 / 0.5);
+  box-shadow: 0 -12px 40px -16px rgb(0 0 0 / 0.45);
+}
+
+.sheet::before {
+  content: '';
+  position: absolute;
+  top: 9px;
+  left: 50%;
+  width: 40px;
+  height: 5px;
+  margin-left: -20px;
+  border-radius: 3px;
+  background: var(--rule);
 }
 
 .sheet::backdrop {
-  background: rgb(10 16 22 / 0.45);
+  background: var(--overlay);
+}
+
+.sheet.is-dragging {
+  transition: none;
+  user-select: none;
+}
+
+.sheet:not(.is-dragging):not(.is-leaving) {
+  transition: transform 260ms var(--ease-out);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .sheet[open] {
+    animation: sheet-up 320ms var(--ease-out);
+  }
+  .sheet[open]::backdrop {
+    animation: backdrop-in 240ms ease;
+  }
+}
+
+@keyframes sheet-up {
+  from {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes backdrop-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (min-width: 760px) {
+  .sheet {
+    position: fixed;
+    inset: 0;
+    width: min(520px, calc(100% - 24px));
+    max-height: calc(100dvh - 48px);
+    margin: auto;
+    padding: 20px;
+    border-radius: 20px;
+    box-shadow: 0 20px 50px -20px rgb(0 0 0 / 0.5);
+  }
+  .sheet::before {
+    display: none;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .sheet[open] {
+      animation: sheet-pop 200ms var(--ease-out);
+    }
+  }
+}
+
+@keyframes sheet-pop {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
 }
 
 .sheet-body {
@@ -859,12 +1379,6 @@ button.tile:active {
   margin-top: 18px;
 }
 
-@media (min-width: 760px) {
-  .sheet {
-    margin: auto;
-  }
-}
-
 /* ---------- lesson ---------- */
 
 .lesson {
@@ -876,10 +1390,14 @@ button.tile:active {
 }
 
 .lesson-bar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px var(--gutter);
+  padding: calc(6px + var(--safe-top)) var(--gutter) 6px;
+  background: var(--bench);
 }
 
 .lesson-meter {
@@ -901,6 +1419,37 @@ button.tile:active {
   flex-direction: column;
   gap: 18px;
   padding: 10px var(--gutter) 24px;
+}
+
+/* Theory cards: swipe sideways to page, and each card slides in from the side it came from. */
+.lesson--theory {
+  touch-action: pan-y;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .lesson-main--next {
+    animation: card-in-next 280ms var(--ease-out);
+  }
+  .lesson-main--back {
+    animation: card-in-back 280ms var(--ease-out);
+  }
+  .lesson:not(.lesson--theory) .lesson-main {
+    animation: card-in-next 240ms var(--ease-out);
+  }
+}
+
+@keyframes card-in-next {
+  from {
+    opacity: 0;
+    transform: translateX(28px);
+  }
+}
+
+@keyframes card-in-back {
+  from {
+    opacity: 0;
+    transform: translateX(-28px);
+  }
 }
 
 .lesson-retry {
@@ -953,6 +1502,22 @@ button.tile:active {
   text-align: left;
   font-weight: 700;
   cursor: pointer;
+}
+
+.option:active:not(:disabled) {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 var(--rule);
+}
+
+.option--chosen:active:not(:disabled) {
+  box-shadow: 0 1px 0 var(--magenta);
+}
+
+.option {
+  transition:
+    transform 80ms ease,
+    background-color 120ms ease,
+    border-color 120ms ease;
 }
 
 .option:disabled {
@@ -1057,9 +1622,50 @@ button.tile:active {
 .lesson-foot {
   position: sticky;
   bottom: 0;
-  padding: 14px var(--gutter) calc(14px + env(safe-area-inset-bottom));
+  z-index: 5;
+  padding: 14px var(--gutter) calc(14px + var(--safe-bottom));
   background: var(--bench);
   border-top: 2px solid var(--bench-deep);
+  transition: background-color 200ms ease;
+}
+
+/* The verdict rises from the bottom edge, where the thumb already is. */
+@media (prefers-reduced-motion: no-preference) {
+  .lesson-foot--right .lesson-foot-inner,
+  .lesson-foot--wrong .lesson-foot-inner {
+    animation: verdict-up 300ms var(--ease-out);
+  }
+  .lesson-foot--right .verdict-icon {
+    animation: verdict-pop 420ms var(--ease-spring) 80ms both;
+  }
+  .lesson-foot--wrong .verdict-icon {
+    animation: verdict-shake 360ms ease 60ms both;
+  }
+}
+
+@keyframes verdict-up {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+}
+
+@keyframes verdict-pop {
+  from {
+    transform: scale(0.3);
+  }
+}
+
+@keyframes verdict-shake {
+  25% {
+    transform: translateX(-5px);
+  }
+  50% {
+    transform: translateX(4px);
+  }
+  75% {
+    transform: translateX(-2px);
+  }
 }
 
 .lesson-foot--right {
@@ -1140,6 +1746,61 @@ button.tile:active {
 .done {
   max-width: 440px;
   margin: 0 auto;
+  padding-top: calc(24px + var(--safe-top));
+  padding-bottom: calc(24px + var(--safe-bottom));
+}
+
+/* Finishing is the reward: the tile lands, then the numbers count in one by one. */
+@media (prefers-reduced-motion: no-preference) {
+  .done > .tile {
+    animation: done-land 560ms var(--ease-spring) both;
+  }
+  .done > h1 {
+    animation: verdict-up 360ms var(--ease-out) 120ms both;
+  }
+  .done-stats > div,
+  .review-results > li {
+    animation: verdict-up 360ms var(--ease-out) both;
+  }
+  .done-stats > div:nth-child(1),
+  .review-results > li:nth-child(1) {
+    animation-delay: 220ms;
+  }
+  .done-stats > div:nth-child(2),
+  .review-results > li:nth-child(2) {
+    animation-delay: 300ms;
+  }
+  .done-stats > div:nth-child(3),
+  .review-results > li:nth-child(3) {
+    animation-delay: 380ms;
+  }
+  .review-results > li:nth-child(n + 4) {
+    animation-delay: 440ms;
+  }
+}
+
+@keyframes done-land {
+  from {
+    opacity: 0;
+    transform: translateY(-40px) scale(0.6) rotate(-8deg);
+  }
+}
+
+.leave-sheet[open] {
+  display: grid;
+  gap: 8px;
+}
+
+.leave-sheet h2 {
+  font-size: var(--step-2);
+}
+
+.leave-sheet p {
+  color: var(--muted);
+}
+
+.btn--danger {
+  color: var(--wrong);
 }
 
 .done h1 {
@@ -1886,8 +2547,3 @@ button.tile:active {
   }
 }
 
-.page-loading {
-  padding: 40px var(--gutter);
-  color: var(--muted);
-  text-align: center;
-}

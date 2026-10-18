@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { HistoryIcon, PlusIcon, TrashIcon, TutorIcon } from '../components/Icons.tsx';
 import { ConnectionPill, TutorChat } from '../components/tutor/TutorChat.tsx';
+import { isTouch } from '../mobile.ts';
 import { href, navigate } from '../router.ts';
 import { deleteThread, useTutorData } from '../tutor-store.ts';
 
@@ -71,7 +72,7 @@ export function TutorScreen({ thread }: { thread?: string }) {
             </a>
           )}
         </header>
-        <TutorChat key={current ?? 'new'} threadId={current} onThread={(id) => open(id)} autoFocus />
+        <TutorChat key={current ?? 'new'} threadId={current} onThread={(id) => open(id)} autoFocus={!isTouch()} />
       </section>
     </div>
   );

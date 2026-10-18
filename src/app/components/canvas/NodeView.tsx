@@ -4,6 +4,7 @@ import { LESSON_BY_ID } from '../../../course/course.ts';
 import { THEORY } from '../../../course/theory/index.ts';
 import type { MapNode } from '../../../study/canvas.ts';
 import { moleculeFromSmiles } from '../../../nanquim/index.ts';
+import { isTouch } from '../../mobile.ts';
 import { MoleculeView } from '../MoleculeView.tsx';
 import { SpecView } from '../SchemeView.tsx';
 import { Rich } from '../TheoryCardView.tsx';
@@ -186,7 +187,7 @@ function NodeEditor({ node, onSave, onDone }: { node: MapNode; onSave: (patch: P
         </>
       )}
       <textarea className="node-input" value={text} rows={4} placeholder="Escreva aqui. **Negrito** marca os termos-chave." aria-label="Texto do cartão" onChange={(e) => setText(e.target.value)} />
-      <p className="node-editor-hint">Ctrl + Enter ou clique fora para salvar.</p>
+      <p className="node-editor-hint">{isTouch() ? 'Toque fora do cartão para salvar.' : 'Ctrl + Enter ou clique fora para salvar.'}</p>
     </div>
   );
 }

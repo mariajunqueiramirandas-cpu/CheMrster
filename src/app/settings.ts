@@ -54,4 +54,11 @@ export function applyTheme(theme: Theme) {
   const root = document.documentElement;
   if (theme === 'system') root.removeAttribute('data-theme');
   else root.setAttribute('data-theme', theme);
+  // The phone's status bar and browser chrome take the bench colour of the theme in use.
+  for (const meta of document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')) {
+    const own = meta.dataset.color ?? (meta.dataset.color = meta.content);
+    meta.content = theme === 'system' ? own : THEME_COLOR[theme];
+  }
 }
+
+const THEME_COLOR: Record<Exclude<Theme, 'system'>, string> = { light: '#E8ECEF', dark: '#151B22' };

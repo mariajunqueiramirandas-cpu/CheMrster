@@ -378,9 +378,12 @@
   box-shadow: 0 3px 0 var(--heat-4);
 }
 
-button.ptile:hover {
-  outline: 2px solid var(--text);
-  outline-offset: 2px;
+/* Hover only where there is a mouse, so taps leave nothing lit behind. */
+@media (hover: hover) {
+  button.ptile:hover {
+    outline: 2px solid var(--text);
+    outline-offset: 2px;
+  }
 }
 
 .ptile--large {

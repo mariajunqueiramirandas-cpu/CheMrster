@@ -1,6 +1,7 @@
-import { type ReactNode, Suspense, lazy, useEffect } from 'react';
+import { type MouseEvent, type ReactNode, Suspense, lazy, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useAccounts } from './account.ts';
-import { BoardIcon, BoltIcon, ChainIcon, ChartIcon, FlameIcon, MapIcon, PathIcon, SlidersIcon, TutorIcon } from './components/Icons.tsx';
+import { BoardIcon, BoltIcon, ChainIcon, ChartIcon, FlameIcon, MapIcon, MoreIcon, PathIcon, SlidersIcon, TutorIcon } from './components/Icons.tsx';
+import { MoreSheet } from './components/MoreSheet.tsx';
 import { Toasts } from './components/Toasts.tsx';
 import { TutorPanel } from './components/tutor/TutorPanel.tsx';
 import { LessonScreen } from './screens/LessonScreen.tsx';
@@ -8,6 +9,7 @@ import { PathScreen } from './screens/PathScreen.tsx';
 import { ReviewScreen } from './screens/ReviewScreen.tsx';
 import { StudioScreen } from './screens/StudioScreen.tsx';
 import { TheoryScreen } from './screens/TheoryScreen.tsx';
+import { haptic } from './mobile.ts';
 import { type Route, href, useRoute } from './router.ts';
 import { applyTheme, useSettings } from './settings.ts';
 import { currentStreak, useProgress } from './store.ts';
@@ -21,6 +23,7 @@ const SettingsScreen = lazy(() => import('./screens/SettingsScreen.tsx').then((m
 const PlansScreen = lazy(() => import('./screens/PlansScreen.tsx').then((m) => ({ default: m.PlansScreen })));
 const TutorScreen = lazy(() => import('./screens/TutorScreen.tsx').then((m) => ({ default: m.TutorScreen })));
 
+/** The top navigation on wide screens. */
 const TABS: Array<{ route: Route; label: string; icon: typeof PathIcon; match: Route['name'][] }> = [
   { route: { name: 'path' }, label: 'Trilha', icon: PathIcon, match: ['path', 'theory'] },
   { route: { name: 'canvas' }, label: 'Mapa', icon: MapIcon, match: ['canvas'] },
@@ -28,6 +31,15 @@ const TABS: Array<{ route: Route; label: string; icon: typeof PathIcon; match: R
   { route: { name: 'progress' }, label: 'Progresso', icon: ChartIcon, match: ['progress'] },
   { route: { name: 'studio' }, label: 'Estruturas', icon: ChainIcon, match: ['studio'] },
 ];
+
+/** The tab bar on phones: four places and the tutor in the middle, the rest under "Mais". */
+const PHONE_TABS: Array<{ route: Route; label: string; icon: typeof PathIcon; match: Route['name'][] } | 'tutor'> = [
+  { route: { name: 'path' }, label: 'Trilha', icon: PathIcon, match: ['path', 'theory'] },
+  { route: { name: 'canvas' }, label: 'Mapa', icon: MapIcon, match: ['canvas'] },
+  'tutor',
+  { route: { name: 'board' }, label: 'Quadro', icon: BoardIcon, match: ['board'] },
+];
+const MORE_ROUTES: Route['name'][] = ['progress', 'studio', 'settings', 'plans'];
 
 function Screen({ route, accounts }: { route: Route; accounts: boolean }) {
   switch (route.name) {
@@ -69,6 +81,8 @@ export function App({ account }: { account?: ReactNode } = {}) {
   const progress = useProgress();
   const { theme } = useSettings();
   const tutor = useTutorPanel();
+  const [more, setMore] = useState(false);
+  const topbarHidden = useScrollMemory(href(route));
 
   useEffect(() => applyTheme(theme), [theme]);
   useEffect(() => {
@@ -107,9 +121,17 @@ export function App({ account }: { account?: ReactNode } = {}) {
 
   const streak = currentStreak(progress);
   const onTutorPage = route.name === 'tutor';
+  const openTutorHere = () => (onTutorPage ? undefined : openTutor(tutor.threadId));
+  // Tapping the tab you are on goes back to the top, as on every phone.
+  const onTab = (e: MouseEvent, match: Route['name'][]) => {
+    haptic('tap');
+    if (!match.includes(route.name)) return;
+    e.preventDefault();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
   return (
     <div className={`shell shell--${route.name}`}>
-      <header className="topbar">
+      <header className={`topbar${topbarHidden ? ' topbar--hidden' : ''}`}>
         <div className="topbar-inner">
           <a className="wordmark" href={href({ name: 'path' })}>
             CheMrster
@@ -136,23 +158,109 @@ export function App({ account }: { account?: ReactNode } = {}) {
               <TutorIcon /> Tutor
             </button>
           )}
-          <a className="icon-btn" href={href({ name: 'settings' })} aria-label="Ajustes" aria-current={route.name === 'settings' ? 'page' : undefined}>
+          <a className="icon-btn topbar-settings" href={href({ name: 'settings' })} aria-label="Ajustes" aria-current={route.name === 'settings' ? 'page' : undefined}>
             <SlidersIcon />
           </a>
           {account && <div className="topbar-account">{account}</div>}
         </div>
       </header>
       <main className={PAGE_CLASS[route.name] ?? 'page'}>
-        <Suspense fallback={<p className="page-loading">Carregando…</p>}>
+        <Suspense fallback={<PageLoading />}>
           <Screen route={route} accounts={accounts} />
         </Suspense>
       </main>
-      {!onTutorPage && !tutor.open && (
-        <button type="button" className="tutor-fab" onClick={() => openTutor(tutor.threadId)} aria-label="Perguntar ao tutor">
-          <TutorIcon /> Tutor
+      <nav className="tabbar" aria-label="Seções">
+        {PHONE_TABS.map((tab) =>
+          tab === 'tutor' ? (
+            <button
+              key="tutor"
+              type="button"
+              className="tabbar-tutor"
+              aria-label="Perguntar ao tutor"
+              aria-current={onTutorPage || tutor.open ? 'page' : undefined}
+              onClick={() => {
+                haptic('tap');
+                openTutorHere();
+              }}
+            >
+              <span className="tabbar-tutor-disc">
+                <TutorIcon />
+              </span>
+              <span>Tutor</span>
+            </button>
+          ) : (
+            <a
+              key={tab.route.name}
+              href={href(tab.route)}
+              aria-current={tab.match.includes(route.name) && !tutor.open ? 'page' : undefined}
+              onClick={(e) => onTab(e, tab.match)}
+            >
+              <tab.icon /> <span>{tab.label}</span>
+            </a>
+          ),
+        )}
+        <button
+          type="button"
+          aria-haspopup="dialog"
+          aria-current={MORE_ROUTES.includes(route.name) && !tutor.open ? 'page' : undefined}
+          onClick={() => {
+            haptic('tap');
+            setMore(true);
+          }}
+        >
+          <MoreIcon /> <span>Mais</span>
         </button>
-      )}
+      </nav>
+      {more && <MoreSheet onClose={() => setMore(false)} />}
       {overlays}
     </div>
   );
+}
+
+/** A quiet placeholder shaped like a page, while a section's code arrives. */
+function PageLoading() {
+  return (
+    <div className="page-loading" aria-busy="true" aria-label="Carregando">
+      <span className="skeleton skeleton--title" />
+      <span className="skeleton skeleton--line" />
+      <span className="skeleton skeleton--line skeleton--short" />
+      <span className="skeleton skeleton--block" />
+    </div>
+  );
+}
+
+/**
+ * Each screen keeps its own scroll position (hash routes never reset it on their own), and on
+ * phones the top bar slides away while reading down and comes back on the way up.
+ */
+function useScrollMemory(key: string): boolean {
+  const saved = useRef(new Map<string, number>());
+  const current = useRef(key);
+  const [hidden, setHidden] = useState(false);
+
+  useLayoutEffect(() => {
+    current.current = key;
+    window.scrollTo({ top: saved.current.get(key) ?? 0 });
+    setHidden(false);
+  }, [key]);
+
+  useEffect(() => {
+    let last = window.scrollY;
+    let frame = 0;
+    const onScroll = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const y = window.scrollY;
+        saved.current.set(current.current, y);
+        const dy = y - last;
+        if (y < 72) setHidden(false);
+        else if (dy > 8) setHidden(true);
+        else if (dy < -8) setHidden(false);
+        if (Math.abs(dy) > 8 || y < 72) last = y;
+      });
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+  return hidden;
 }
