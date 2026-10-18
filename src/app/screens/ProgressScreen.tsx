@@ -3,7 +3,7 @@
  * study calendar, XP by day, the reviews coming up, weak spots and question formats.
  * Every chart has a table view.
  */
-import { type CSSProperties, type KeyboardEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { type CSSProperties, type KeyboardEvent, type ReactNode, useMemo, useRef, useState } from 'react';
 import { LESSON_BY_ID, LESSONS, unitOf } from '../../course/course.ts';
 import type { Lesson } from '../../course/types.ts';
 import {
@@ -27,6 +27,7 @@ import {
 } from '../../study/progress.ts';
 import { BoltIcon, FlameIcon, TutorIcon } from '../components/Icons.tsx';
 import { useMedia, useWidth } from '../hooks.ts';
+import { dismissSheet, useSheet } from '../mobile.ts';
 import { href, navigate } from '../router.ts';
 import { useSettings } from '../settings.ts';
 import { type Progress, currentStreak, useProgress } from '../store.ts';
@@ -289,13 +290,10 @@ function UnitBars({ all }: { all: Record<string, LessonMastery> }) {
 }
 
 function LessonSheet({ mastery: m, lesson, onClose }: { mastery?: LessonMastery; lesson: Lesson; onClose: () => void }) {
-  const ref = useRef<HTMLDialogElement>(null);
-  useEffect(() => {
-    if (ref.current && !ref.current.open) ref.current.showModal();
-  }, []);
+  const ref = useSheet();
   const unit = unitOf(lesson.id);
   return (
-    <dialog ref={ref} className="sheet" onClose={onClose} onClick={(e) => e.target === ref.current && onClose()}>
+    <dialog ref={ref} className="sheet" onClose={onClose}>
       <div className="sheet-body">
         <span className={`ptile ptile--${m?.level ?? 'nova'} ptile--large`} aria-hidden="true">
           <span className="ptile-n">{lesson.element.number}</span>
@@ -353,7 +351,7 @@ function LessonSheet({ mastery: m, lesson, onClose }: { mastery?: LessonMastery;
             Ver teoria
           </a>
         )}
-        <button type="button" className="btn btn--quiet" onClick={onClose}>
+        <button type="button" className="btn btn--quiet" onClick={() => dismissSheet(ref.current)}>
           Fechar
         </button>
       </div>

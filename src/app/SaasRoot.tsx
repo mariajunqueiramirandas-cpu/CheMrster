@@ -63,8 +63,18 @@ function Gate() {
     if (readyFor && user?.firstName && !settingsStore.get().name) updateSettings({ name: user.firstName });
   }, [readyFor, user?.firstName]);
 
-  if (!isLoaded) return <p className="page-loading">Carregando…</p>;
+  if (!isLoaded) return <Boot label="Carregando" />;
   if (!isSignedIn) return <LandingScreen />;
-  if (readyFor !== userId) return <p className="page-loading">Carregando seus dados…</p>;
+  if (readyFor !== userId) return <Boot label="Carregando seus dados" />;
   return <App account={<UserButton />} />;
+}
+
+/** The same mark and bar index.html paints before any script, so loading reads as one moment. */
+function Boot({ label }: { label: string }) {
+  return (
+    <div className="boot" role="status" aria-label={label}>
+      <img src="/icon.svg" alt="" width={64} height={64} />
+      <span />
+    </div>
+  );
 }

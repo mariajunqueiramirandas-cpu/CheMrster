@@ -59,6 +59,7 @@ import {
 } from '../components/Icons.tsx';
 import { MoleculeView } from '../components/MoleculeView.tsx';
 import { typingIn } from '../hooks.ts';
+import { dismissSheet, haptic, isTouch, useSheet } from '../mobile.ts';
 import { uid } from '../persist.ts';
 import { ask } from '../tutor-store.ts';
 
@@ -100,6 +101,9 @@ export function CanvasScreen() {
 
   const gesture = useRef<Gesture | null>(null);
   const pointers = useRef(new Map<number, Point>());
+  // Phones have no double click: two quick taps in one place stand in for it.
+  const lastTap = useRef<{ t: number; p: Point; node?: string } | null>(null);
+  const tappedTwiceAt = useRef(0);
 
   // A new map shows its own saved view, or fits its cards.
   useEffect(() => {
@@ -171,8 +175,9 @@ export function CanvasScreen() {
     if (e.button !== 0 && e.button !== 1) return;
     const t = e.target as HTMLElement;
     if (t.closest('.node-editor')) return;
-    // No text selection or native image drag while working the canvas.
-    if (e.pointerType === 'mouse') e.preventDefault();
+    // No text selection or native image drag while working the canvas; for touch, this also
+    // stops the emulated mouse events after a tap, which would pull focus out of a new note.
+    e.preventDefault();
     const p = local(e);
     pointers.current.set(e.pointerId, p);
     e.currentTarget.setPointerCapture(e.pointerId);
@@ -291,9 +296,11 @@ export function CanvasScreen() {
       setSelected([]);
       setSelectedEdge(null);
       setEditing(null);
+      if (doubleTap(e, undefined)) addNode({ kind: 'note', title: '' }, world(local(e)), true);
     }
     if (g.mode === 'move') {
       if (g.moved) editCanvas((c) => moveNodes(c, g.ids, Math.round(g.dx), Math.round(g.dy)));
+      else if (g.ids.length === 1 && doubleTap(e, g.ids[0]) && canvasStore.get().nodes[g.ids[0]]?.kind !== 'theory') setEditing(g.ids[0]);
       setDrag(null);
     }
     if (g.mode === 'marquee') {
@@ -311,6 +318,20 @@ export function CanvasScreen() {
         setSelectedEdge(id);
       }
     }
+  };
+
+  /** Whether this touch tap is the second of a quick pair on the same spot (and card). */
+  const doubleTap = (e: ReactPointerEvent<HTMLDivElement>, node: string | undefined): boolean => {
+    if (e.pointerType !== 'touch') return false;
+    const p = local(e);
+    const prev = lastTap.current;
+    const twice = !!prev && e.timeStamp - prev.t < 340 && dist(prev.p, p) < 28 && prev.node === node;
+    lastTap.current = twice ? null : { t: e.timeStamp, p, node };
+    if (twice) {
+      tappedTwiceAt.current = e.timeStamp;
+      haptic('tap');
+    }
+    return twice;
   };
 
   // Wheel pans; Ctrl/⌘ + wheel (and trackpad pinch) zooms around the pointer.
@@ -425,6 +446,8 @@ export function CanvasScreen() {
   }, [selected, selectedEdge, nodes, duplicate, removeSelection, fit, addNode]);
 
   const onDoubleClick = (e: ReactMouseEvent<HTMLDivElement>) => {
+    // Some phones also send a dblclick after two taps, which the taps already handled.
+    if (e.timeStamp - tappedTwiceAt.current < 800) return;
     // Pointer capture sends clicks to the surface itself; find what is really under the pointer.
     const t = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
     if (!t || t.closest('.node-editor')) return;
@@ -531,7 +554,11 @@ export function CanvasScreen() {
               <PathIcon /> Teoria da trilha
             </button>
           </div>
-          <p className="canvas-empty-hint">Dica: dê dois cliques em qualquer lugar para criar uma nota.</p>
+          <p className="canvas-empty-hint">
+            {isTouch()
+              ? 'Dica: toque duas vezes em qualquer lugar para criar uma nota. Dois dedos aproximam e afastam.'
+              : 'Dica: dê dois cliques em qualquer lugar para criar uma nota.'}
+          </p>
         </div>
       )}
 
@@ -690,13 +717,7 @@ function Minimap({ nodes, view, size, onJump }: { nodes: MapNode[]; view: View; 
   );
 }
 
-function useDialog() {
-  const ref = useRef<HTMLDialogElement>(null);
-  useEffect(() => {
-    if (ref.current && !ref.current.open) ref.current.showModal();
-  }, []);
-  return ref;
-}
+const useDialog = useSheet;
 
 function MoleculeDialog({ onClose, onAdd }: { onClose: () => void; onAdd: (smiles: string, name: string) => void }) {
   const ref = useDialog();
@@ -719,10 +740,10 @@ function MoleculeDialog({ onClose, onAdd }: { onClose: () => void; onAdd: (smile
     ref.current?.close();
   };
   return (
-    <dialog ref={ref} className="sheet canvas-dialog" onClose={onClose} onClick={(e) => e.target === ref.current && ref.current?.close()} aria-labelledby="mol-dialog-title">
+    <dialog ref={ref} className="sheet canvas-dialog" onClose={onClose} aria-labelledby="mol-dialog-title">
       <header className="canvas-dialog-head">
         <h2 id="mol-dialog-title">Adicionar estrutura</h2>
-        <button type="button" className="icon-btn" onClick={() => ref.current?.close()} aria-label="Fechar">
+        <button type="button" className="icon-btn" onClick={() => dismissSheet(ref.current)} aria-label="Fechar">
           <CloseIcon />
         </button>
       </header>
@@ -771,10 +792,10 @@ function MoleculeDialog({ onClose, onAdd }: { onClose: () => void; onAdd: (smile
 function TheoryDialog({ onClose, onAdd }: { onClose: () => void; onAdd: (lessonId: string, index: number, title: string) => void }) {
   const ref = useDialog();
   return (
-    <dialog ref={ref} className="sheet canvas-dialog" onClose={onClose} onClick={(e) => e.target === ref.current && ref.current?.close()} aria-labelledby="theory-dialog-title">
+    <dialog ref={ref} className="sheet canvas-dialog" onClose={onClose} aria-labelledby="theory-dialog-title">
       <header className="canvas-dialog-head">
         <h2 id="theory-dialog-title">Teoria da trilha</h2>
-        <button type="button" className="icon-btn" onClick={() => ref.current?.close()} aria-label="Fechar">
+        <button type="button" className="icon-btn" onClick={() => dismissSheet(ref.current)} aria-label="Fechar">
           <CloseIcon />
         </button>
       </header>
@@ -818,10 +839,10 @@ function TutorMapDialog({ onClose }: { onClose: () => void }) {
     ask({ text: `Monte no meu mapa um mapa de conceitos sobre ${t.trim()}, com os conceitos-chave ligados por setas com rótulo.`, about: 'Mapa de conceitos', open: true });
   };
   return (
-    <dialog ref={ref} className="sheet canvas-dialog" onClose={onClose} onClick={(e) => e.target === ref.current && ref.current?.close()} aria-labelledby="tutor-map-title">
+    <dialog ref={ref} className="sheet canvas-dialog" onClose={onClose} aria-labelledby="tutor-map-title">
       <header className="canvas-dialog-head">
         <h2 id="tutor-map-title">Montar com o tutor</h2>
-        <button type="button" className="icon-btn" onClick={() => ref.current?.close()} aria-label="Fechar">
+        <button type="button" className="icon-btn" onClick={() => dismissSheet(ref.current)} aria-label="Fechar">
           <CloseIcon />
         </button>
       </header>
@@ -855,10 +876,10 @@ function MapsDialog({ onClose }: { onClose: () => void }) {
   const [name, setName] = useState('');
   const [renaming, setRenaming] = useState<string | null>(null);
   return (
-    <dialog ref={ref} className="sheet canvas-dialog" onClose={onClose} onClick={(e) => e.target === ref.current && ref.current?.close()} aria-labelledby="maps-title">
+    <dialog ref={ref} className="sheet canvas-dialog" onClose={onClose} aria-labelledby="maps-title">
       <header className="canvas-dialog-head">
         <h2 id="maps-title">Seus mapas</h2>
-        <button type="button" className="icon-btn" onClick={() => ref.current?.close()} aria-label="Fechar">
+        <button type="button" className="icon-btn" onClick={() => dismissSheet(ref.current)} aria-label="Fechar">
           <CloseIcon />
         </button>
       </header>

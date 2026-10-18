@@ -392,9 +392,13 @@
 .card-editor {
   display: grid;
   gap: 14px;
-  width: min(560px, calc(100% - 24px));
-  max-height: calc(100dvh - 24px);
-  overflow-y: auto;
+}
+
+@media (min-width: 760px) {
+  .card-editor {
+    width: min(560px, calc(100% - 24px));
+    max-height: calc(100dvh - 24px);
+  }
 }
 
 .card-editor[open] {

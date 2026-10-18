@@ -58,7 +58,7 @@ export function LandingScreen() {
           </figure>
         </section>
 
-        <section className="landing-features" aria-label="O que tem no CheMrster">
+        <section className="landing-features scroll-x" aria-label="O que tem no CheMrster">
           {FEATURES.map(({ icon: Icon, title, text }) => (
             <article key={title} className="landing-feature">
               <Icon />

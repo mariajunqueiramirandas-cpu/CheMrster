@@ -230,3 +230,15 @@ export const ArrowRightIcon = (p: SVGProps<SVGSVGElement>) => (
     <path d="M4 12h15M13 6l6 6-6 6" />
   </svg>
 );
+
+export const ChevronRightIcon = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}>
+    <path d="m9 5 7 7-7 7" />
+  </svg>
+);
+
+export const StarIcon = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}>
+    <path d="m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.8-5.2 2.8 1-5.8-4.3-4.1 5.9-.9L12 3.5Z" />
+  </svg>
+);

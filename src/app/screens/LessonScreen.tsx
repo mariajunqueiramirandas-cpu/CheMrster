@@ -7,6 +7,7 @@ import { BoltIcon, CheckIcon, CloseIcon, FlameIcon } from '../components/Icons.t
 import { TheoryActions, TheoryCardView } from '../components/TheoryCardView.tsx';
 import { syncAfterPractice } from '../board-store.ts';
 import { typingIn } from '../hooks.ts';
+import { haptic, useSwipe } from '../mobile.ts';
 import { navigate } from '../router.ts';
 import { INTERVALS, currentStreak, recordLesson, recordStudyTime, useProgress } from '../store.ts';
 import { Practice, type PracticeItem } from './Practice.tsx';
@@ -60,6 +61,23 @@ function TheoryPhase({ lessonId, cards, onDone, onExit }: { lessonId: string; ca
   const [index, setIndex] = useState(0);
   const last = index === cards.length - 1;
   const shownAt = useRef(Date.now());
+  const root = useRef<HTMLDivElement>(null);
+  const [dir, setDir] = useState<'next' | 'back'>('next');
+  const go = (to: number) => {
+    setDir(to < index ? 'back' : 'next');
+    setIndex(to);
+  };
+  // Cards page like cards: swipe left for the next one, right for the one before.
+  useSwipe(root, (d) => {
+    if (d === 'left') {
+      haptic('tap');
+      if (last) onDone();
+      else go(index + 1);
+    } else if (index > 0) {
+      haptic('tap');
+      go(index - 1);
+    }
+  });
 
   useEffect(() => {
     window.scrollTo({ top: 0 });
@@ -72,14 +90,14 @@ function TheoryPhase({ lessonId, cards, onDone, onExit }: { lessonId: string; ca
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Enter' || e.target instanceof HTMLButtonElement || typingIn(e)) return;
       if (last) onDone();
-      else setIndex((i) => i + 1);
+      else go(index + 1);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [last, onDone]);
+  }, [last, onDone, index]);
 
   return (
-    <div className="lesson lesson--theory">
+    <div className="lesson lesson--theory" ref={root}>
       <header className="lesson-bar">
         <button type="button" className="icon-btn" onClick={onExit} aria-label="Sair da lição">
           <CloseIcon />
@@ -99,7 +117,7 @@ function TheoryPhase({ lessonId, cards, onDone, onExit }: { lessonId: string; ca
         </button>
       </header>
 
-      <main className="lesson-main" key={index}>
+      <main className={`lesson-main lesson-main--card lesson-main--${dir}`} key={index}>
         <p className="theory-kicker">
           Teoria · {index + 1} de {cards.length}
         </p>
@@ -110,14 +128,14 @@ function TheoryPhase({ lessonId, cards, onDone, onExit }: { lessonId: string; ca
       <footer className="lesson-foot">
         <div className={`lesson-foot-inner${index > 0 ? ' lesson-foot-inner--pair' : ''}`}>
           {index > 0 && (
-            <button type="button" className="btn" onClick={() => setIndex(index - 1)}>
+            <button type="button" className="btn" onClick={() => go(index - 1)}>
               Voltar
             </button>
           )}
           <button
             type="button"
             className="btn btn--primary btn--wide"
-            onClick={() => (last ? onDone() : setIndex(index + 1))}
+            onClick={() => (last ? onDone() : go(index + 1))}
             autoFocus
           >
             {last ? 'Praticar' : 'Continuar'}
@@ -135,6 +153,7 @@ function LessonDone({ lessonId, accuracy, xp }: { lessonId: string; accuracy: nu
   const streak = currentStreak(progress);
   const box = progress.completed[lessonId]?.box ?? 1;
   const days = INTERVALS[box];
+  useEffect(() => haptic('done'), []);
   return (
     <div className="done">
       <ElementTile lesson={lesson} state="done" size="large" />

@@ -50,7 +50,24 @@ device. Without a key the tutor still works offline from the course's own conten
 | `server/main.ts` | The production server: static files plus the API, configured from the environment (`server/config.ts`) |
 | `Dockerfile`, `docker-compose.yml` | The image and the app + Postgres stack for Dokploy |
 | `src/app/` | React app: the lesson path, theory and practice, daily review, the *Estruturas* studio, the tutor, *Mapa*, *Quadro*, *Progresso*, *Ajustes* and *Planos* |
+| `src/app/mobile.ts` | Phone-first plumbing: haptics, the keyboard-aware viewport, bottom sheets you can swipe down, swipes |
 | `src/app/SaasRoot.tsx`, `cloud-sync.ts` | With accounts: Clerk's provider, the landing page for visitors, and the sync between the device and the account |
+
+## Made for phones first
+
+Most learners study on a phone, so the phone layout is the main one and wide screens get
+the extras. Sections sit in a tab bar under the thumb (*Trilha*, *Mapa*, the tutor raised in
+the middle, *Quadro*, and *Mais* for the rest), the top bar slides away while reading, each
+tab keeps its scroll position and tapping the open tab goes back to the top. Dialogs are bottom
+sheets that close with a swipe down, as does the tutor; theory cards page with a sideways
+swipe; on the map two taps make a note and two fingers zoom. Answers buzz on Android, screens
+change with a short transition (none with reduced motion), full-height screens end right
+above the on-screen keyboard, fields never trigger iOS's zoom, and everything clears the notch
+and the home indicator. The smallest phones get their own pass (`src/app/styles/compact.css`):
+type and margins tighten from 400px down to 320px, cover screens of folding phones (280px)
+get icon-only tabs, short screens get slimmer bars, a phone turned sideways shows the drawing
+and the answers side by side, and nothing ever makes the page scroll sideways. Added to the home screen (`public/manifest.webmanifest`), it opens
+full screen like an app.
 
 ## Nanquim: structures that look printed
 

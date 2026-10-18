@@ -4,6 +4,7 @@ import { useAccounts } from '../account.ts';
 import { type SyncState, deleteAccountData, useSyncState } from '../cloud-sync.ts';
 import { DownloadIcon, TutorIcon } from '../components/Icons.tsx';
 import { UsageMeter } from '../components/UsageMeter.tsx';
+import { isTouch } from '../mobile.ts';
 import { exportAll, importAll } from '../persist.ts';
 import { DAILY_GOALS, TUTOR_MODELS, type Theme, updateSettings, useSettings } from '../settings.ts';
 import { resetProgress } from '../store.ts';
@@ -276,35 +277,67 @@ export function SettingsScreen() {
         </div>
       </section>
 
-      <section className="settings-section" aria-labelledby="set-keys">
-        <h2 id="set-keys">Atalhos</h2>
-        <dl className="shortcuts">
-          <div>
-            <dt>
-              <kbd>Ctrl</kbd> + <kbd>K</kbd>
-            </dt>
-            <dd>Abrir o tutor em qualquer tela</dd>
-          </div>
-          <div>
-            <dt>
-              <kbd>1</kbd>–<kbd>4</kbd>, <kbd>Enter</kbd>
-            </dt>
-            <dd>Escolher e verificar nas questões</dd>
-          </div>
-          <div>
-            <dt>
-              <kbd>N</kbd>, <kbd>Delete</kbd>, <kbd>Ctrl</kbd> + <kbd>Z</kbd>
-            </dt>
-            <dd>Nova nota, apagar e desfazer no mapa</dd>
-          </div>
-          <div>
-            <dt>
-              <kbd>Alt</kbd> + setas
-            </dt>
-            <dd>Mover cartões no quadro</dd>
-          </div>
-        </dl>
-      </section>
+      {isTouch() ? (
+        <section className="settings-section" aria-labelledby="set-keys">
+          <h2 id="set-keys">Gestos</h2>
+          <dl className="shortcuts">
+            <div>
+              <dt>Deslizar para o lado</dt>
+              <dd>Passar os cartões de teoria de uma lição</dd>
+            </div>
+            <div>
+              <dt>Puxar para baixo</dt>
+              <dd>Fechar o tutor e as janelas que sobem da borda</dd>
+            </div>
+            <div>
+              <dt>Dois toques</dt>
+              <dd>Criar uma nota no mapa, ou editar um cartão</dd>
+            </div>
+            <div>
+              <dt>Pinçar com dois dedos</dt>
+              <dd>Aproximar e afastar o mapa</dd>
+            </div>
+            <div>
+              <dt>Tocar e segurar</dt>
+              <dd>Arrastar um cartão no quadro</dd>
+            </div>
+            <div>
+              <dt>Tocar na aba aberta</dt>
+              <dd>Voltar ao topo da tela</dd>
+            </div>
+          </dl>
+        </section>
+      ) : (
+        <section className="settings-section" aria-labelledby="set-keys">
+          <h2 id="set-keys">Atalhos</h2>
+          <dl className="shortcuts">
+            <div>
+              <dt>
+                <kbd>Ctrl</kbd> + <kbd>K</kbd>
+              </dt>
+              <dd>Abrir o tutor em qualquer tela</dd>
+            </div>
+            <div>
+              <dt>
+                <kbd>1</kbd>–<kbd>4</kbd>, <kbd>Enter</kbd>
+              </dt>
+              <dd>Escolher e verificar nas questões</dd>
+            </div>
+            <div>
+              <dt>
+                <kbd>N</kbd>, <kbd>Delete</kbd>, <kbd>Ctrl</kbd> + <kbd>Z</kbd>
+              </dt>
+              <dd>Nova nota, apagar e desfazer no mapa</dd>
+            </div>
+            <div>
+              <dt>
+                <kbd>Alt</kbd> + setas
+              </dt>
+              <dd>Mover cartões no quadro</dd>
+            </div>
+          </dl>
+        </section>
+      )}
     </div>
   );
 }
