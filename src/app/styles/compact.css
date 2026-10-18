@@ -1,0 +1,546 @@
+/*
+ * The smallest phones: 320px wide (iPhone SE, small Androids), 280px (folding phones' cover
+ * screens), and short screens (568px tall, or any phone turned sideways). Loaded last, so these
+ * win over the screens' own rules. Native apps on these screens tighten every margin and keep
+ * the bars slim rather than shrink the text people read.
+ */
+
+/* ---------- narrow: 360px and below ---------- */
+
+@media (max-width: 360px) {
+  :root {
+    --gutter: max(12px, env(safe-area-inset-left, 0px), env(safe-area-inset-right, 0px));
+  }
+
+  .topbar-inner {
+    gap: 6px;
+  }
+
+  .wordmark {
+    font-size: 1.15rem;
+  }
+
+  .stat {
+    min-height: 32px;
+    padding: 0 8px 0 6px;
+    font-size: 0.9rem;
+  }
+
+  .tabbar > a,
+  .tabbar > button {
+    font-size: 0.66rem;
+  }
+
+  .tabbar > a::before,
+  .tabbar > button:not(.tabbar-tutor)::before {
+    width: 48px;
+    margin-left: -24px;
+  }
+
+  /* Path */
+  .unit {
+    margin-top: 28px;
+  }
+
+  .unit-head {
+    padding-left: 12px;
+  }
+
+  .review-card {
+    flex-wrap: wrap;
+  }
+
+  .review-card .btn {
+    flex: 1 1 100%;
+  }
+
+  /* Sheets: the tile beside the text shrinks so the title keeps its width. */
+  .sheet-body {
+    gap: 12px;
+    align-items: flex-start;
+  }
+
+  .sheet-body .tile--large,
+  .theory-page-head .tile--large {
+    width: 72px;
+    height: 72px;
+  }
+
+  .sheet-body .tile--large .tile-symbol,
+  .theory-page-head .tile--large .tile-symbol {
+    font-size: 2rem;
+  }
+
+  .theory-page-head {
+    gap: 12px;
+    align-items: flex-start;
+  }
+
+  /* Lessons */
+  .lesson-main {
+    gap: 14px;
+  }
+
+  .option {
+    gap: 10px;
+    padding: 10px 12px;
+  }
+
+  .options--row .option {
+    padding: 10px 6px;
+  }
+
+  .options--row .option-key {
+    display: none;
+  }
+
+  .picks {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .picks--wide {
+    grid-template-columns: 1fr;
+  }
+
+  .pick {
+    min-height: 112px;
+    padding: 24px 6px 10px;
+  }
+
+  .verdict-icon {
+    width: 34px;
+    height: 34px;
+  }
+
+  .done-stats {
+    gap: 6px;
+  }
+
+  .done-stats dd {
+    font-size: var(--step-1);
+  }
+
+  /* Studio and analysis */
+  .analysis {
+    gap: 12px;
+    padding: 12px;
+  }
+
+  .paper--studio {
+    min-height: 200px;
+    padding: 18px 10px 12px;
+  }
+
+  .gallery-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  /* Tutor */
+  .tutor-panel-mark {
+    display: none;
+  }
+
+  .msg--tutor {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .msg--tutor .msg-mark {
+    display: none;
+  }
+
+  .msg--user {
+    max-width: 92%;
+  }
+
+  .composer {
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+
+  /* "Mais": the stats stack over the goal. */
+  .more-today {
+    grid-template-columns: auto auto;
+  }
+
+  .more-goal {
+    grid-column: 1 / -1;
+    text-align: left;
+  }
+
+  /* Map tools: just icons, closer together. */
+  .canvas-tools,
+  .canvas-selection {
+    left: 8px;
+    max-width: calc(100% - 16px);
+  }
+
+  .canvas-zoom {
+    left: 8px;
+  }
+
+  .map-switch {
+    max-width: 112px;
+  }
+
+  .canvas-empty {
+    padding: 16px;
+  }
+
+  /* Board columns fill the screen, so one column is one swipe. */
+  .board-cols {
+    grid-auto-columns: calc(100vw - 2 * var(--gutter) - 12px);
+  }
+}
+
+/* ---------- very narrow: folding phones' cover screens ---------- */
+
+@media (max-width: 300px) {
+  .stat:last-child {
+    display: none;
+  }
+
+  .tabbar > a > span,
+  .tabbar > button:not(.tabbar-tutor) > span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .tabbar > a::before,
+  .tabbar > button:not(.tabbar-tutor)::before {
+    top: 50%;
+    width: 44px;
+    height: 34px;
+    margin: -17px 0 0 -22px;
+  }
+
+  .tabbar-tutor > span:last-child {
+    display: none;
+  }
+
+  .tabbar-tutor-disc {
+    margin-top: 0;
+    width: 46px;
+    height: 46px;
+    border-width: 0;
+  }
+
+  .options--row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .done-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .done-stats div {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+  }
+
+  .done-stats dt {
+    flex-direction: row;
+  }
+
+  .done-stats dd {
+    margin: 0;
+  }
+
+  .lesson-foot-row {
+    grid-template-columns: 1fr;
+  }
+
+  .lesson-foot-row .btn--tutor {
+    order: 1;
+    min-height: 40px;
+  }
+
+  .path-continue-tile {
+    display: none;
+  }
+
+  .chain-node {
+    width: 136px;
+    margin-left: -68px;
+  }
+}
+
+/* ---------- short: 640px tall and below ---------- */
+
+@media (max-height: 640px) and (max-width: 899px) {
+  :root {
+    --topbar-row: 50px;
+    --tabbar-row: 54px;
+  }
+
+  .tabbar-tutor-disc {
+    width: 46px;
+    height: 46px;
+    margin-top: -20px;
+  }
+
+  .tabbar > a,
+  .tabbar > button {
+    padding-top: 4px;
+  }
+
+  .tabbar > a::before,
+  .tabbar > button:not(.tabbar-tutor)::before {
+    top: 3px;
+    height: 28px;
+  }
+
+  .lesson-bar {
+    padding-top: calc(4px + var(--safe-top));
+    padding-bottom: 4px;
+  }
+
+  .lesson-main {
+    padding-top: 6px;
+  }
+
+  .lesson-foot {
+    padding-top: 10px;
+    padding-bottom: calc(10px + var(--safe-bottom));
+  }
+
+  .lesson-foot-inner {
+    gap: 8px;
+  }
+
+  .lesson-hint {
+    font-size: 0.75rem;
+    line-height: 1.3;
+  }
+
+  .paper--prompt {
+    min-height: 140px;
+    padding: 12px;
+  }
+
+  .paper--tap {
+    min-height: 180px;
+  }
+
+  .option {
+    min-height: 50px;
+  }
+
+  .btn {
+    min-height: 46px;
+  }
+
+  .verdict-explain {
+    font-size: 0.95rem;
+    line-height: 1.4;
+  }
+
+  /* The tutor's welcome stays short enough to leave room for the suggestions and the box. */
+  .chat-empty {
+    gap: 8px;
+    margin-top: 4px;
+  }
+
+  .chat-empty-mark {
+    width: 44px;
+    height: 44px;
+  }
+
+  .chat-empty-mark svg {
+    width: 24px;
+    height: 24px;
+  }
+
+  .chat-empty > p:not(.chat-empty-note) {
+    display: none;
+  }
+
+  .chat-scroll {
+    padding-top: 12px;
+    padding-bottom: 12px;
+  }
+
+  .composer {
+    padding-top: 8px;
+  }
+
+  .composer textarea {
+    min-height: 44px;
+    padding: 10px 14px;
+  }
+
+  .composer-btn {
+    width: 44px;
+    height: 44px;
+  }
+
+  .tutor-panel-head {
+    min-height: 0;
+    padding-top: calc(10px + var(--safe-top));
+    padding-bottom: 6px;
+  }
+
+  .tutor-main-head {
+    padding-top: 6px;
+    padding-bottom: 6px;
+  }
+
+  .tutor-main-head .btn--small {
+    min-height: 34px;
+  }
+
+  .sheet {
+    padding-top: 22px;
+  }
+
+  .sheet-actions {
+    margin-top: 12px;
+  }
+
+  .done {
+    gap: 10px;
+  }
+
+  .done > .tile--large {
+    width: 76px;
+    height: 76px;
+  }
+
+  .done > .tile--large .tile-symbol {
+    font-size: 2rem;
+  }
+
+  .canvas,
+  .tutor-screen {
+    min-height: 0;
+  }
+
+  .canvas-empty {
+    top: 62px;
+    max-height: calc(100% - 128px);
+  }
+
+  .canvas-empty > p:not(.canvas-empty-hint) {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    overflow: hidden;
+  }
+}
+
+/* ---------- a phone on its side ---------- */
+
+@media (max-height: 440px) and (max-width: 950px) {
+  :root {
+    --topbar-row: 44px;
+    --tabbar-row: 46px;
+  }
+
+  /* Sideways there is width to spare and no height: icon and label sit on one line. */
+  .tabbar > a,
+  .tabbar > button {
+    flex-direction: row;
+    gap: 6px;
+    padding: 0 4px;
+  }
+
+  .tabbar > a::before,
+  .tabbar > button:not(.tabbar-tutor)::before {
+    top: 50%;
+    width: 88%;
+    height: 34px;
+    margin: -17px 0 0 -44%;
+  }
+
+  .tabbar-tutor-disc {
+    width: 36px;
+    height: 36px;
+    margin-top: 0;
+    border-width: 0;
+    box-shadow: none;
+  }
+
+  .tabbar-tutor-disc svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .paper--prompt,
+  .paper--tap {
+    min-height: 120px;
+  }
+
+  /* Questions: the drawing on the left, the answers on the right, both in view at once. */
+  .lesson {
+    max-width: 920px;
+  }
+
+  .lesson-prompt {
+    max-width: none;
+    font-size: var(--step-1);
+  }
+
+  .lesson-hint {
+    display: none;
+  }
+
+  .lesson:not(.lesson--theory) .lesson-main {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-auto-flow: row dense;
+    align-items: start;
+    gap: 12px 16px;
+  }
+
+  .lesson:not(.lesson--theory) .lesson-main > * {
+    grid-column: 1 / -1;
+  }
+
+  .lesson:not(.lesson--theory) .lesson-main:has(> .paper--prompt:not(.paper--tap)) > .paper--prompt {
+    grid-column: 1;
+  }
+
+  .lesson:not(.lesson--theory) .lesson-main:has(> .paper--prompt:not(.paper--tap)) > :is(.options, .picks) {
+    grid-column: 2;
+    grid-row: span 2;
+  }
+
+  .lesson:not(.lesson--theory) .lesson-main > .paper--prompt + .paper--prompt {
+    grid-column: 1;
+  }
+
+  .lesson-main .picks:not(.picks--wide) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .lesson-main .pick {
+    min-height: 96px;
+    padding: 22px 6px 8px;
+  }
+
+  .lesson-main .options {
+    gap: 8px;
+  }
+
+  .lesson-main .option {
+    min-height: 44px;
+    padding-top: 6px;
+    padding-bottom: 6px;
+  }
+
+  .sheet {
+    max-height: calc(var(--vvh, 100dvh) - 8px);
+  }
+
+  .chat-empty-mark,
+  .chat-empty h2 {
+    display: none;
+  }
+}

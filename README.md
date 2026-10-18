@@ -63,7 +63,10 @@ sheets that close with a swipe down, as does the tutor; theory cards page with a
 swipe; on the map two taps make a note and two fingers zoom. Answers buzz on Android, screens
 change with a short transition (none with reduced motion), full-height screens end right
 above the on-screen keyboard, fields never trigger iOS's zoom, and everything clears the notch
-and the home indicator. Added to the home screen (`public/manifest.webmanifest`), it opens
+and the home indicator. The smallest phones get their own pass (`src/app/styles/compact.css`):
+type and margins tighten from 400px down to 320px, cover screens of folding phones (280px)
+get icon-only tabs, short screens get slimmer bars, a phone turned sideways shows the drawing
+and the answers side by side, and nothing ever makes the page scroll sideways. Added to the home screen (`public/manifest.webmanifest`), it opens
 full screen like an app.
 
 ## Nanquim: structures that look printed

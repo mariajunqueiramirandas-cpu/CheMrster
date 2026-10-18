@@ -159,7 +159,7 @@ function UnitChain({
   const xs = lessons.map((_, i) => (i % 2 === 0 ? -SWING : SWING));
   return (
     <div className="chain" style={{ height }}>
-      <svg className="chain-bonds" viewBox={`-160 0 320 ${height}`} preserveAspectRatio="xMidYMin meet" aria-hidden="true">
+      <svg className="chain-bonds" viewBox={`-100 0 200 ${height}`} preserveAspectRatio="xMidYMin meet" aria-hidden="true">
         {lessons.slice(1).map((l, i) => {
           const done = stateOf(lessons[i]) === 'done' && stateOf(l) !== 'locked' && stateOf(l) !== 'soon';
           return (

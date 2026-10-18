@@ -10,6 +10,7 @@ import './styles/board.css';
 import './styles/canvas.css';
 import './styles/settings.css';
 import './styles/landing.css';
+import './styles/compact.css';
 
 const root = createRoot(document.getElementById('root')!);
 

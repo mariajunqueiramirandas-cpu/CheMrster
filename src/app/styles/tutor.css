@@ -683,6 +683,7 @@
 
 .composer textarea {
   flex: 1;
+  min-width: 0;
   min-height: 48px;
   max-height: 160px;
   padding: 12px 16px;
@@ -728,6 +729,7 @@
 
 .tutor-screen {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   height: calc(var(--vvh, 100dvh) - var(--topbar-h) - var(--tabbar-h));
   min-height: 320px;
 }
