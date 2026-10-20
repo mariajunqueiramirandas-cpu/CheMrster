@@ -116,7 +116,7 @@ booklets:
 | Convention | Seen in |
 | --- | --- |
 | Aldehyde H drawn (O=C–H); open-chain N–H drawn as a bond | 2022 Q102, 2023 Q134, 2024 Q112 |
-| CH₃ written on O/S-methyls, terminal =CH₂ and methyls on C=C | 2022 Q102, 2024 Q112 |
+| CH₃ written on O/S-methyls, terminal =CH₂ and methyls on C=C (and ≡CH, methyls on C≡C, alike) | 2022 Q102, 2024 Q112 |
 | Ring with one group (or two, ortho/meta) stands upright, group on top, C=O up-left | 2022 Q102, 2024 Q96 |
 | Para rings rise to the right at 30°, larger group on the right | 2022 Q102, 2023 Q134 |
 | Counter-ion set beside the charge: "O⁻ Na⁺" | 2023 Q134 |
