@@ -16,6 +16,15 @@ export function setTokenSource(source: TokenSource | undefined) {
   tokenSource = source;
 }
 
+/** Where this site's own API lives: the same origin on the web, a configured server in the Android app. */
+let apiBase = '';
+export function setApiBase(base: string) {
+  apiBase = base.replace(/\/+$/, '');
+}
+export const apiUrl = (path: string) => `${apiBase}${path}`;
+/** The API's origin, for clients that need an absolute URL. */
+export const apiOrigin = () => apiBase || location.origin;
+
 /** fetch() with the session's token added, for this site's own API. */
 export const authFetch: typeof fetch = async (input, init) => {
   const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
@@ -36,7 +45,7 @@ export const usePlanOffer = offer.use;
 /** What the browser needs to start, from the server (so one Docker image serves any Clerk instance). */
 export async function loadConfig(): Promise<{ clerkPublishableKey: string | null }> {
   try {
-    const res = await fetch('/api/config', { headers: { accept: 'application/json' } });
+    const res = await fetch(apiUrl('/api/config'), { headers: { accept: 'application/json' } });
     if (res.ok) {
       const j = (await res.json()) as { clerkPublishableKey?: unknown; billing?: PlanOffer | null };
       if (typeof j.clerkPublishableKey === 'string' && j.clerkPublishableKey) {

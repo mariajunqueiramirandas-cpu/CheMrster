@@ -80,8 +80,8 @@ export function persisted<T>(key: string, revive: (stored: unknown) => T, option
       options.onReplace?.();
     },
   });
-  // Another tab saved: follow it.
-  if (typeof window !== 'undefined') {
+  // Another tab saved: follow it. (React Native has a window without events.)
+  if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
     window.addEventListener('storage', (e) => {
       if (e.key !== key) return;
       state = revive(read(key));

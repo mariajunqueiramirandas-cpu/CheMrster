@@ -15,7 +15,7 @@ import {
 } from '../study/board.ts';
 import type { TaskInput } from '../tutor/tools.ts';
 import { persisted, uid, usePersisted } from './persist.ts';
-import { href } from './router.ts';
+import { href } from './routes.ts';
 import { progressStore } from './store.ts';
 import { toast } from './toast.ts';
 

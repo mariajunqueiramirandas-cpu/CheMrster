@@ -9,3 +9,4 @@ out
 !.env.example
 Dockerfile
 docker-compose*.yml
+mobile

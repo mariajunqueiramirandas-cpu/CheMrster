@@ -20,7 +20,7 @@ import {
 } from '../study/canvas.ts';
 import type { MapCardInput, MapLinkInput } from '../tutor/tools.ts';
 import { memory, persisted, uid, usePersisted } from './persist.ts';
-import { href } from './router.ts';
+import { href } from './routes.ts';
 import { toast } from './toast.ts';
 
 export const canvasStore = persisted<Canvas>(
