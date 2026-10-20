@@ -1,0 +1,37 @@
+# Builds the Android app (mobile/) into an installable APK, attached to each run as an artifact.
+name: Android
+
+on:
+  push:
+    paths: ['mobile/**', 'src/**', '.github/workflows/android.yml']
+  pull_request:
+    paths: ['mobile/**', 'src/**', '.github/workflows/android.yml']
+  workflow_dispatch:
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npx expo prebuild --platform android --no-install
+      # Signed with the debug key: fine to install directly, not for the Play Store (see mobile/README.md).
+      - run: ./gradlew assembleRelease --no-daemon
+        working-directory: mobile/android
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chemrster-apk
+          path: mobile/android/app/build/outputs/apk/release/app-release.apk

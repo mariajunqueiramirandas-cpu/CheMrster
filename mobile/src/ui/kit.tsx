@@ -139,10 +139,13 @@ export function Btn({
     >
       {l.edge ? <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.edge, { backgroundColor: l.edge }]} /> : null}
       {l.edge ? <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.face, { backgroundColor: l.bg }]} /> : null}
-      {icon?.(l.fg)}
-      <Text style={[styles.btnText, small && styles.btnTextSmall, { color: l.fg }]} numberOfLines={1}>
-        {label}
-      </Text>
+      {/* Above the edge and face layers, which are positioned and would paint over it. */}
+      <View style={styles.btnContent}>
+        {icon?.(l.fg)}
+        <Text style={[styles.btnText, small && styles.btnTextSmall, { color: l.fg }]} numberOfLines={1}>
+          {label}
+        </Text>
+      </View>
     </Press>
   );
 }
@@ -210,7 +213,8 @@ const styles = StyleSheet.create({
   wide: { alignSelf: 'stretch' },
   edge: { borderRadius: 999, top: 3, bottom: -3 },
   face: { borderRadius: 999 },
-  btnText: { fontFamily: FONT.uiBold, fontSize: SIZE.body },
+  btnContent: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, zIndex: 1, flexShrink: 1 },
+  btnText: { fontFamily: FONT.uiBold, fontSize: SIZE.body, flexShrink: 1 },
   btnTextSmall: { fontSize: 15 },
   iconBtn: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   paper: { borderRadius: 6 },

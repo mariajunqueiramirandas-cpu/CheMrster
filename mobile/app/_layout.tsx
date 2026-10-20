@@ -7,6 +7,7 @@ import {
 import { BricolageGrotesque_700Bold, BricolageGrotesque_800ExtraBold } from '@expo-google-fonts/bricolage-grotesque';
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
+import { NavigationBar } from 'expo-navigation-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import * as SystemUI from 'expo-system-ui';
@@ -48,7 +49,9 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: c.bench }}>
       <SafeAreaProvider>
+        {/* The bars follow the app's theme, which can differ from the system's (Ajustes). */}
         <StatusBar style={c.dark ? 'light' : 'dark'} />
+        <NavigationBar style={c.dark ? 'light' : 'dark'} />
         <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: c.bench }, animation: 'slide_from_right' }}>
           <Stack.Screen name="(tabs)" />
           {/* Practice slides up over the app and back down when done. */}

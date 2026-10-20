@@ -7,31 +7,31 @@ import { type Route, parseRoute } from '../../../src/app/routes.ts';
 
 export type { Route };
 
-/** The path that shows a route in this app. */
-export function pathOf(route: Route): string {
+/** Where a route lives in this app: a path, and its query parameters. */
+export function hrefOf(route: Route): { pathname: string; params?: Record<string, string> } {
   switch (route.name) {
     case 'lesson':
-      return `/licao/${encodeURIComponent(route.id)}`;
+      return { pathname: '/licao/[id]', params: { id: route.id } };
     case 'theory':
-      return `/teoria/${encodeURIComponent(route.id)}`;
+      return { pathname: '/teoria/[id]', params: { id: route.id } };
     case 'review':
-      return '/revisao';
+      return { pathname: '/revisao' };
     case 'studio':
-      return route.smiles ? `/estruturas?smiles=${encodeURIComponent(route.smiles)}` : '/estruturas';
+      return { pathname: '/estruturas', params: route.smiles ? { smiles: route.smiles } : undefined };
     case 'tutor':
-      return route.thread ? `/tutor?thread=${encodeURIComponent(route.thread)}` : '/tutor';
+      return { pathname: '/tutor', params: route.thread ? { thread: route.thread } : undefined };
     case 'canvas':
-      return '/mapa';
+      return { pathname: '/mapa' };
     case 'board':
-      return '/quadro';
+      return { pathname: '/quadro' };
     case 'progress':
-      return '/progresso';
+      return { pathname: '/progresso' };
     // Plans need an account, which the Android app does not have yet.
     case 'settings':
     case 'plans':
-      return '/ajustes';
+      return { pathname: '/ajustes' };
     default:
-      return '/';
+      return { pathname: '/' };
   }
 }
 
@@ -39,9 +39,9 @@ const TABS: Route['name'][] = ['path', 'canvas', 'board', 'tutor'];
 
 /** Opens a route: tabs switch, everything else goes on top of the stack. */
 export function go(route: Route) {
-  const path = pathOf(route);
-  if (TABS.includes(route.name)) router.navigate(path as never);
-  else router.push(path as never);
+  const href = hrefOf(route) as never;
+  if (TABS.includes(route.name)) router.navigate(href);
+  else router.push(href);
 }
 
 /** Follows a link the shared code wrote as a hash route. */
