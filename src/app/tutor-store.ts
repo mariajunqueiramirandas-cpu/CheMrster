@@ -13,7 +13,7 @@ import { titleFrom, toApiMessages } from '../tutor/history.ts';
 import { offlineReply } from '../tutor/offline.ts';
 import { analyze, describeExercise, makeExercise, react } from '../tutor/tools.ts';
 import type { Part, Thread, TutorTurn, UserTurn } from '../tutor/types.ts';
-import { authFetch } from './account.ts';
+import { apiOrigin, apiUrl, authFetch } from './account.ts';
 import { addTasks, removeCards, seedBoard } from './board-store.ts';
 import { addCluster, removeFromMap } from './canvas-store.ts';
 import { memory, onWriteFailure, persisted, uid, usePersisted } from './persist.ts';
@@ -94,7 +94,7 @@ export const useTutorUsage = usage.use;
 
 async function fetchStatus(): Promise<boolean> {
   try {
-    const r = await authFetch('/api/anthropic/status', { headers: { accept: 'application/json' }, cache: 'no-store' });
+    const r = await authFetch(apiUrl('/api/anthropic/status'), { headers: { accept: 'application/json' }, cache: 'no-store' });
     if (!r.ok) return false;
     const j = (await r.json()) as { available?: unknown } & Partial<TutorUsage>;
     if (typeof j.limit === 'number' && typeof j.used === 'number') usage.set({ plan: j.plan === 'plus' ? 'plus' : 'free', limit: j.limit, used: j.used });
@@ -135,7 +135,7 @@ async function clientFor(c: Exclude<Connection, { kind: 'offline' }>): Promise<A
   const { default: Anthropic } = await import('@anthropic-ai/sdk');
   // Through the server, the proxy adds the real key; the browser never sees it.
   // With accounts on, each request carries the learner's session so the server can check their plan.
-  if (c.kind === 'server') return new Anthropic({ apiKey: 'via-servidor', baseURL: `${location.origin}/api/anthropic`, dangerouslyAllowBrowser: true, fetch: authFetch });
+  if (c.kind === 'server') return new Anthropic({ apiKey: 'via-servidor', baseURL: `${apiOrigin()}/api/anthropic`, dangerouslyAllowBrowser: true, fetch: authFetch });
   return new Anthropic({ apiKey: c.apiKey, dangerouslyAllowBrowser: true });
 }
 

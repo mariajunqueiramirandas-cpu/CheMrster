@@ -12,6 +12,10 @@ subscription paid through [Mercado Pago](https://www.mercadopago.com.br)).
 Deployment is one `docker-compose.yml`, made for [Dokploy](https://dokploy.com); see
 [Deploying](#deploying-docker-compose-on-dokploy).
 
+There is also a native **Android app** in [`mobile/`](mobile/README.md) (React Native with Expo). It
+runs the same engine, course, tutor and stores as the web app, imported from `src/` rather than
+copied, and GitHub Actions builds an installable APK on every change.
+
 ```
 npm install
 npm run dev        # app at http://localhost:5173
@@ -48,6 +52,7 @@ device. Without a key the tutor still works offline from the course's own conten
 | `server/auth.ts`, `server/db.ts` | Clerk session verification; Postgres storage (state with revisions, daily tutor usage, subscriptions) and an in-memory twin for dev and tests |
 | `server/billing.ts` | Pro through Mercado Pago subscriptions: checkout, reading subscriptions back, cancelling, and the signed webhook |
 | `server/main.ts` | The production server: static files plus the API, configured from the environment (`server/config.ts`) |
+| `mobile/` | The Android app: native screens over the shared `src/` code (see [`mobile/README.md`](mobile/README.md)) |
 | `Dockerfile`, `docker-compose.yml` | The image and the app + Postgres stack for Dokploy |
 | `src/app/` | React app: the lesson path, theory and practice, daily review, the *Estruturas* studio, the tutor, *Mapa*, *Quadro*, *Progresso*, *Ajustes* and *Planos* |
 | `src/app/mobile.ts` | Phone-first plumbing: haptics, the keyboard-aware viewport, bottom sheets you can swipe down, swipes |
