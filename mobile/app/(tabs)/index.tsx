@@ -1,3 +1,3 @@
-import { PathScreen } from '../../src/screens/PathScreen.tsx';
+import { DailyScreen } from '../../src/screens/DailyScreen.tsx';
 
-export default PathScreen;
+export default DailyScreen;

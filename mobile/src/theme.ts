@@ -1,9 +1,10 @@
 /**
- * The web app's look on Android: lab bench, white paper, black ink, phenolphthalein magenta.
- * Colours follow the device unless the learner picked a theme in Ajustes.
+ * CheMrster's look: lab bench, white paper, black ink, phenolphthalein magenta. Colours follow
+ * the device unless the player picked a theme in Ajustes.
  */
 import { useColorScheme } from 'react-native';
-import { useSettings } from '../../src/app/settings.ts';
+import type { Verdict } from '../../src/nomenclatura/grade.ts';
+import { usePrefs } from './prefs.ts';
 
 export interface Palette {
   dark: boolean;
@@ -85,13 +86,46 @@ export const DARK: Palette = {
 };
 
 export function useTheme(): Palette {
-  const { theme } = useSettings();
+  const { theme } = usePrefs();
   const system = useColorScheme();
   const dark = theme === 'dark' || (theme === 'system' && system === 'dark');
   return dark ? DARK : LIGHT;
 }
 
-/** Font families as loaded in app/_layout.tsx (Android picks weights by family, not fontWeight). */
+/** A graded tile: its fill and the ink on it. */
+export interface TileLook {
+  bg: string;
+  fg: string;
+}
+
+const TILES: Record<'light' | 'dark' | 'contrast', Record<Verdict, TileLook>> = {
+  light: {
+    right: { bg: '#1d8a52', fg: '#ffffff' },
+    close: { bg: '#e2ab1f', fg: '#2a1d00' },
+    wrong: { bg: '#68747f', fg: '#ffffff' },
+  },
+  dark: {
+    right: { bg: '#2a9d62', fg: '#ffffff' },
+    close: { bg: '#d6a82e', fg: '#201600' },
+    wrong: { bg: '#3a4552', fg: '#e6ebf0' },
+  },
+  // Wordle's high-contrast pair: orange for right, blue for close.
+  contrast: {
+    right: { bg: '#f5793a', fg: '#1c0b00' },
+    close: { bg: '#85c0f9', fg: '#06203a' },
+    wrong: { bg: '#68747f', fg: '#ffffff' },
+  },
+};
+
+/** The colours of right, close and wrong, in the player's theme and contrast. */
+export function useTiles(): Record<Verdict, TileLook> {
+  const c = useTheme();
+  const { contrast } = usePrefs();
+  if (contrast) return { ...TILES.contrast, wrong: TILES[c.dark ? 'dark' : 'light'].wrong };
+  return TILES[c.dark ? 'dark' : 'light'];
+}
+
+/** Font families as loaded in app/_layout.tsx (Android picks weights by family, not fontWeight). Formulas use Arimo, the exam booklets' Arial. */
 export const FONT = {
   ui: 'AtkinsonHyperlegibleNext_400Regular',
   uiBold: 'AtkinsonHyperlegibleNext_700Bold',

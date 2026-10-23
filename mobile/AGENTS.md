@@ -1,12 +1,15 @@
-This is CheMrster's Android app, an Expo/React Native application. Prioritize mobile-first patterns, performance, and cross-platform compatibility.
+This is CheMrster's nomenclature game, *Nomenclatura do dia*: a Wordle-style daily IUPAC naming
+challenge (acids, bases and salts) for Android and the web, an Expo/React Native application.
+Prioritize mobile-first patterns, performance, and cross-platform compatibility.
 
 ## Shared code
 
-The app does not copy the web app's logic: it imports the chemistry engine, the course, the tutor and
-the stores straight from `../src` (`metro.config.js` resolves their packages from this folder's
-`node_modules`). Fix logic there, for both apps; this folder holds only the native screens.
-Shared modules must not touch the DOM; the stores persist through `localStorage`, which
-`index.ts` installs on Android from `expo-sqlite`.
+The game's rules do not live in this folder: the app imports its engine from `../src/nomenclatura`
+(pieces, catalog, grading, daily puzzle, explanations, statistics), and the stores' plumbing from
+`../src/app/persist.ts` and `../src/app/toast.ts` (`metro.config.js` resolves their packages from
+this folder's `node_modules`). Fix logic there, where `npm test` at the repository root covers it;
+this folder holds only the native screens. Shared modules must not touch the DOM; the stores persist
+through `localStorage`, which `index.ts` installs on Android from `expo-sqlite`.
 
 ## Expo has changed — do not trust your training data
 
@@ -33,7 +36,7 @@ Run lint and typecheck before declaring any task done.
 
 ## Navigation & Routing
 
-- Use **Expo Router** for all navigation. Routes live in `app/` — every file there is a screen, `_layout.tsx` files define navigators. Keep non-route code in `src/` (screens, UI kit, helpers). Shared code speaks in the web app's hash routes; `src/lib/nav.ts` maps them to paths.
+- Use **Expo Router** for all navigation. Routes live in `app/` — every file there is a screen, `_layout.tsx` files define navigators. Keep non-route code in `src/` (screens, game components, UI kit, helpers).
 - Import `Link`, `router`, and `useLocalSearchParams` from `expo-router`.
 - Docs: https://docs.expo.dev/router/introduction.md
 

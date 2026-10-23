@@ -37,9 +37,12 @@ export function Txt({ variant = 'body', tone = 'text', style, ...rest }: TextPro
   return <Text {...rest} style={[VARIANT[variant], { color: toneColor(c, tone) }, style]} />;
 }
 
-/** `**key terms**` in bold, as the course writes them. */
+/** Keeps a suffix in one piece ("-ico" never breaks after its hyphen): a word joiner after the hyphen. */
+export const keepSuffixes = (text: string) => text.replace(/(^|[\s(*])-(?=\p{L})/gu, '$1-\u2060');
+
+/** `**key terms**` in bold. */
 export function Rich({ text, variant = 'body', tone = 'text', style }: { text: string; variant?: Variant; tone?: Tone; style?: StyleProp<TextStyle> }) {
-  const parts = text.split(/\*\*(.+?)\*\*/g);
+  const parts = keepSuffixes(text).split(/\*\*(.+?)\*\*/g);
   return (
     <Txt variant={variant} tone={tone} style={style}>
       {parts.map((p, i) =>

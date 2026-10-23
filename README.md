@@ -12,14 +12,16 @@ subscription paid through [Mercado Pago](https://www.mercadopago.com.br)).
 Deployment is one `docker-compose.yml`, made for [Dokploy](https://dokploy.com); see
 [Deploying](#deploying-docker-compose-on-dokploy).
 
-There is also a native **Android app** in [`mobile/`](mobile/README.md) (React Native with Expo). It
-runs the same engine, course, tutor and stores as the web app, imported from `src/` rather than
-copied, and GitHub Actions builds an installable APK on every change.
+There is also **CheMrster: Nomenclatura do dia**, a Wordle-style daily game in [`mobile/`](mobile/README.md)
+(React Native with Expo, for Android and the web). Every day everyone gets the same acid, base and salt, and
+builds each one's IUPAC name from its pieces (hipo·clor·oso, sulf·ato de ferro(III)) in six tries. Its engine,
+[`src/nomenclatura/`](src/nomenclatura), lives here with the rest of the shared code, and GitHub Actions
+builds an installable APK on every change.
 
 ```
 npm install
 npm run dev        # app at http://localhost:5173
-npm test           # 535 tests: drawing, chemistry, lessons, review, progress, board, canvas, tutor, proxy, API, sync
+npm test           # 596 tests: drawing, chemistry, lessons, review, progress, board, canvas, tutor, proxy, API, sync, nomenclature game
 npm run build      # typecheck + production bundle
 npm run serve      # the production server: ./dist plus the API (after npm run build)
 npm run sheet      # render every gallery molecule to PNG contact sheets in ./out
@@ -52,7 +54,8 @@ device. Without a key the tutor still works offline from the course's own conten
 | `server/auth.ts`, `server/db.ts` | Clerk session verification; Postgres storage (state with revisions, daily tutor usage, subscriptions) and an in-memory twin for dev and tests |
 | `server/billing.ts` | Pro through Mercado Pago subscriptions: checkout, reading subscriptions back, cancelling, and the signed webhook |
 | `server/main.ts` | The production server: static files plus the API, configured from the environment (`server/config.ts`) |
-| `mobile/` | The Android app: native screens over the shared `src/` code (see [`mobile/README.md`](mobile/README.md)) |
+| `src/nomenclatura/` | The nomenclature game's engine: the pieces of inorganic names, ~200 acids, bases and salts, Wordle-style grading, the daily puzzle, explanations, statistics and the shared result |
+| `mobile/` | *Nomenclatura do dia*, the daily IUPAC naming game for Android and the web (see [`mobile/README.md`](mobile/README.md)) |
 | `Dockerfile`, `docker-compose.yml` | The image and the app + Postgres stack for Dokploy |
 | `src/app/` | React app: the lesson path, theory and practice, daily review, the *Estruturas* studio, the tutor, *Mapa*, *Quadro*, *Progresso*, *Ajustes* and *Planos* |
 | `src/app/mobile.ts` | Phone-first plumbing: haptics, the keyboard-aware viewport, bottom sheets you can swipe down, swipes |

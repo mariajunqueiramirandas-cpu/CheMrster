@@ -1,18 +1,46 @@
-# CheMrster for Android
+# CheMrster: Nomenclatura do dia
 
-The CheMrster course as a native Android app, written in React Native with [Expo](https://expo.dev)
-(SDK 58, React Native 0.88, Expo Router). The app shares the web app's engine instead of
-copying it. Nanquim, the chemistry, the course and its exercise generators, the tutor, and the
-stores for progress, board, map and settings all come from `../src`. A question generated on
-the phone is graded by the same code as on the web, and a backup made in one app restores in
-the other.
+A daily nomenclature challenge for the ENEM, in the spirit of Wordle. Every day everyone gets the
+same three compounds, an **acid**, a **base** and a **salt**, shown as formulas. You build each
+one's IUPAC name from its pieces, the way Brazilian textbooks teach it:
+
+| Kind | Slots | Example |
+| --- | --- | --- |
+| Ácido | prefixo · radical · sufixo | HClO → *hipo · clor · oso* → ácido hipocloroso |
+| Base | cátion · carga | Fe(OH)₃ → *ferro · III* → hidróxido de ferro(III) |
+| Sal | prefixo · radical · sufixo · de · cátion · carga | NaHCO₃ → *hidrogeno · carbon · ato* de *sódio* |
+
+Prefix and charge may stay empty (dashed slots). Each guess turns over slot by slot:
+
+- 🟩 **certo**: the right piece, or an empty slot that should be empty.
+- 🟨 **quase**: a piece of the same family, but not this one (-ito for -ato, II for III, per- for hipo-).
+- ⬛ **errado**: the wrong piece, or a slot left empty that needed one.
+
+There are six tries per compound. After each one the game explains the name from the formula: the
+oxidation number and the hipo…oso / …ico / per…ico series, the charges that give the Roman
+numeral, the acid an anion comes from, and the traditional and everyday names (sulfato férrico,
+bicarbonato). The week ramps up: Monday and Tuesday are easy, midweek medium, the weekend hard. A
+new puzzle opens at local midnight.
+
+Around the game:
+
+- **Statistics:** days played, hit rate, streak and record, tries per hit, and hit rate by function.
+- **Sharing:** the result goes out as squares, with no names, so it spoils nothing.
+- **Treino:** unlimited practice, by function and difficulty. It does not count in the statistics.
+- **Guia:** the rules, and the tables of every ion in the game.
+- **Ajustes:** light/dark theme and a high-contrast palette (orange and blue).
+- **On the web:** a physical keyboard works (Enter sends, Backspace deletes).
+
+Everything is in Portuguese and saved on the device.
 
 ```
 cd mobile
 npm install
-npx expo start            # Metro; open with a development build (npx expo run:android)
+npx expo start            # Metro; open with a development build (npx expo run:android) or press w for the web
 npm run typecheck         # the app and the shared code it imports
 npm run bundle            # the Android JavaScript bundle, as a check
+npx expo export --platform web --output-dir web-build
+                          # a static web build of the same game
 npx expo prebuild --platform android && (cd android && ./gradlew assembleRelease)
                           # android/app/build/outputs/apk/release/app-release.apk
 ```
@@ -25,28 +53,34 @@ configure a release keystore.
 
 ## How it fits together
 
+The rules live in `../src/nomenclatura/` (no React Native in there), tested with the rest of the
+shared code by `npm test` at the repository root:
+
 | Path | What it does |
 | --- | --- |
-| `app/` | Routes (Expo Router): the tabs *Trilha*, *Mapa*, *Tutor*, *Quadro*, *Mais*; lessons and the review slide up over them; theory, *Estruturas*, *Progresso* and *Ajustes* open on top |
-| `src/screens/` | The screens, ported from `../src/app/screens` with the same copy and behaviour |
-| `src/ui/` | The UI kit: the theme's text, buttons and paper, the icon set, `MoleculeView` (Nanquim drawings with react-native-svg, inked in bond by bond, atoms tappable), schemes, theory cards, sheets |
-| `src/tutor/`, `src/canvas/`, `src/board/`, `src/progress/`, `src/studio/`, `src/settings/` | Each section's own components |
-| `src/lib/nav.ts` | The web app's hash routes (`#/mapa`, a toast's link) mapped to the app's screens |
+| `../src/nomenclatura/pieces.ts` | The pieces (prefixes, element roots, suffixes, cations, Roman numerals), the slots of each kind of name, and how pieces spell a word (tio + sulfato = tiossulfato) |
+| `../src/nomenclatura/catalog.ts` | ~200 compounds with tiers and facts; base and salt formulas are built from their ions |
+| `../src/nomenclatura/grade.ts` | Wordle-style grading slot by slot, accepted alternatives (ortofosfato), the keyboard's colours |
+| `../src/nomenclatura/explain.ts` | Why each compound has its name, from its formula |
+| `../src/nomenclatura/daily.ts` | Puzzle numbers by local date, the day's trio (no repeats until a pool runs out), practice picks |
+| `../src/nomenclatura/play.ts`, `store.ts` | Saved games, statistics, streaks and the text to share |
+
+The app holds the screens:
+
+| Path | What it does |
+| --- | --- |
+| `app/` | Routes (Expo Router): the tabs *Hoje*, *Treino* and *Guia* |
+| `src/screens/` | The three screens |
+| `src/game/` | The round (formula, board, keyboard, result), the flipping tiles, the sheets (how to play, statistics, preferences), the midnight clock and sharing |
+| `src/ui/` | The UI kit: text, buttons, cards, sheets, icons, the top bar, toasts |
+| `src/prefs.ts`, `src/theme.ts` | Theme and contrast preferences; the palette and the tile colours |
 | `metro.config.js` | Watches `../src` and resolves its packages from this folder, so there is one React |
-| `index.ts` | Installs `localStorage` from `expo-sqlite` before the stores load |
+| `index.ts` | Installs `localStorage` from `expo-sqlite` (Android) before the stores load |
 
-## What carries over, and what differs
+## Adding compounds
 
-- **Saved on the phone.** Progress, reviews, board, map, tutor conversations and settings persist in
-  SQLite through the same `localStorage` keys the web app uses. *Ajustes* exports and imports the
-  same backup file as the web app.
-- **The tutor.** It works offline from the course's own content with no setup. With an Anthropic API
-  key in *Ajustes* it answers with Claude, streaming, with the same tools (analysis, reactions,
-  questions, map and board). The key stays on the device. To use a CheMrster server's key instead,
-  build with `EXPO_PUBLIC_API_URL=https://your-server` (a server without accounts; signing in from
-  the app is not built yet).
-- **Not in the app yet:** accounts (Clerk), sync between devices and the *Pro* plan. Those need a
-  native sign-in flow. Until then, the backup file moves data between the web and the phone.
-- **Feels like Android.** It has the system back gesture (lessons ask before throwing away a session),
-  haptics on answers, edge-to-edge drawing under the status and navigation bars, dark mode
-  following the system (or *Ajustes*), and reduced motion respected.
+Add a line to `ACID_DEFS`, `BASE_DEFS` or `SALT_DEFS` in `../src/nomenclatura/catalog.ts`. The tests
+check that each name spells right, that every oxyacid's suffix matches the oxidation number of its
+formula, and that every answer can be typed on the keyboard. Puzzles already played keep the
+compound they were played with. Changing a pool reshuffles the days that use it, so add
+compounds before launch or accept that future days change.
