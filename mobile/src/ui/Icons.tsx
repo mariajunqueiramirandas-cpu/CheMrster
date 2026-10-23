@@ -249,3 +249,26 @@ export const StarIcon = (p: IconProps) => (
     <Path d="m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.8-5.2 2.8 1-5.8-4.3-4.1 5.9-.9L12 3.5Z" />
   </Svg>
 );
+
+/** A flask: today's challenge. */
+export const FlaskIcon = (p: IconProps) => (
+  <Svg {...base(p)}>
+    <Path d="M9.5 3.5h5M10.5 3.5v5.2L5 18.2A1.5 1.5 0 0 0 6.3 20.5h11.4a1.5 1.5 0 0 0 1.3-2.3L13.5 8.7V3.5" />
+    <Path d="M7.6 14.5h8.8" />
+  </Svg>
+);
+
+/** An open book: the guide. */
+export const BookIcon = (p: IconProps) => (
+  <Svg {...base(p)}>
+    <Path d="M12 6.5C10.2 5 7.6 4.5 4 4.8v13.4c3.6-.3 6.2.2 8 1.7 1.8-1.5 4.4-2 8-1.7V4.8c-3.6-.3-6.2.2-8 1.7Z" />
+    <Path d="M12 6.5v13.4" />
+  </Svg>
+);
+
+export const HelpIcon = (p: IconProps) => (
+  <Svg {...base(p)}>
+    <Circle cx="12" cy="12" r="8.5" />
+    <Path d="M9.6 9.5a2.5 2.5 0 1 1 3.4 2.3c-.6.3-1 .8-1 1.5v.4M12 16.6h.01" />
+  </Svg>
+);

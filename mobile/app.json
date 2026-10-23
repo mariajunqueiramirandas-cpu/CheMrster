@@ -34,8 +34,6 @@
       "expo-router",
       "expo-sqlite",
       "expo-font",
-      "expo-sharing",
-      "expo-web-browser",
       [
         "expo-splash-screen",
         {
@@ -49,7 +47,7 @@
       ]
     ],
     "scheme": "chemrster",
-    "description": "Química do zero ao herói para o ENEM.",
+    "description": "Nomenclatura do dia: o desafio diário de nomes IUPAC de ácidos, bases e sais para o ENEM.",
     "backgroundColor": "#E8ECEF",
     "experiments": {
       "typedRoutes": false,

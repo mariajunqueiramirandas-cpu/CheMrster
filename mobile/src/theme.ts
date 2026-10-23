@@ -1,9 +1,9 @@
 /**
- * The web app's look on Android: lab bench, white paper, black ink, phenolphthalein magenta.
- * Colours follow the device unless the learner picked a theme in Ajustes.
+ * CheMrster's look: lab bench, white paper, black ink, phenolphthalein magenta. Colours follow
+ * the device unless the player picked a theme in Ajustes.
  */
 import { useColorScheme } from 'react-native';
-import { useSettings } from '../../src/app/settings.ts';
+import { usePrefs } from './prefs.ts';
 
 export interface Palette {
   dark: boolean;
@@ -85,13 +85,13 @@ export const DARK: Palette = {
 };
 
 export function useTheme(): Palette {
-  const { theme } = useSettings();
+  const { theme } = usePrefs();
   const system = useColorScheme();
   const dark = theme === 'dark' || (theme === 'system' && system === 'dark');
   return dark ? DARK : LIGHT;
 }
 
-/** Font families as loaded in app/_layout.tsx (Android picks weights by family, not fontWeight). */
+/** Font families as loaded in app/_layout.tsx (Android picks weights by family, not fontWeight). Formulas use Arimo, the exam booklets' Arial. */
 export const FONT = {
   ui: 'AtkinsonHyperlegibleNext_400Regular',
   uiBold: 'AtkinsonHyperlegibleNext_700Bold',

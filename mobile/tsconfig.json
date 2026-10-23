@@ -13,12 +13,6 @@
       ],
       "react/*": [
         "./node_modules/@types/react/*"
-      ],
-      "@anthropic-ai/sdk": [
-        "./node_modules/@anthropic-ai/sdk"
-      ],
-      "@anthropic-ai/sdk/*": [
-        "./node_modules/@anthropic-ai/sdk/*"
       ]
     }
   },
