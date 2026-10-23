@@ -64,6 +64,21 @@ describe('ENEM conventions', () => {
     expect(labelTexts(depict('CCOc1ccc(NC(C)=O)cc1', enem)).filter((t) => t.includes('CH'))).toEqual([]); // fenacetina
   });
 
+  it('labels alkyne ends like alkene ends: terminal ≡CH and methyls on C≡C', () => {
+    expect(labelTexts(depict('C#CCCC', enem))).toEqual(['CH']); // pent-1-ino
+    expect(labelTexts(depict('CC#CC', enem))).toEqual(['CH3', 'H3C']); // but-2-ino
+    expect(labelTexts(depict('C#C', enem))).toEqual(['CH', 'HC']); // etino
+  });
+
+  it('joins a double bond to a labelled =CH2 cleanly at the bare carbon', () => {
+    const d = depict('C=CC', enem); // propeno: H3C–CH=CH2
+    const vertex = site(d, 1);
+    const bond = d.molecule.bondBetween(site(d, 0).index, 1)!;
+    const ends = d.primitives.flatMap((p) => (p.type === 'line' && p.bond === bond.index ? [p.a, p.b] : []));
+    // Offset like any chain double bond: one stroke runs into the vertex itself.
+    expect(ends.some((e) => Math.hypot(e.x - vertex.x, e.y - vertex.y) < 1e-6)).toBe(true);
+  });
+
   it('sets a counter-ion right beside the opposite charge: "O⁻ Na⁺" (2023, Q134)', () => {
     const d = depict('CC(=O)[O-].[Na+]', enem);
     const o = site(d, 3);

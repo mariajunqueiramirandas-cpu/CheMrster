@@ -58,7 +58,8 @@ export interface Conventions {
   amineHydrogen: boolean;
   /**
    * Which carbons get a written label in skeletal formulas. 'enem' labels methyls on O
-   * or S (H3C–O), terminal =CH2 and methyls on C=C carbons, as the booklets do.
+   * or S (H3C–O), terminal =CH2 and methyls on C=C carbons, as the booklets do (and
+   * likewise ≡CH and methyls on C≡C).
    */
   carbonLabels: 'none' | 'terminal' | 'enem' | 'all';
   /** Put single-atom counter-ions right next to the opposite charge ("O⁻ Na⁺"). */
@@ -339,20 +340,24 @@ function draw(
   const P = coords.map((c) => vec(c.x * L, -c.y * L));
   const formula = options.formula ?? 'skeletal';
   const heavyNeighbors = (i: number) => mol.neighbors(i).filter((n) => mol.atoms[n].element !== 'H');
-  /** The booklets write CH3 on O/S, terminal =CH2, and methyls on C=C carbons. */
+  /**
+   * The booklets write CH3 on O/S, terminal =CH2, and methyls on C=C carbons. Alkynes
+   * follow the same rule (terminal ≡CH, methyls on C≡C): otherwise their ends are bare
+   * strokes and a straight C–C≡C–C hides which points are carbons.
+   */
   const enemCarbonLabel = (i: number) => {
     const nb = heavyNeighbors(i);
     if (nb.length !== 1) return false;
     const n = nb[0];
     const el = mol.atoms[n].element;
     if (el === 'O' || el === 'S') return true;
-    if (mol.bondBetween(i, n)!.order === 2) return true;
+    if (mol.bondBetween(i, n)!.order >= 2) return true;
     return (
       el === 'C' &&
       mol.adjacency[n].some((bi) => {
         const b = mol.bonds[bi];
         const o = mol.other(b, n);
-        return b.order === 2 && !b.aromatic && o !== i && mol.atoms[o].element === 'C';
+        return b.order >= 2 && !b.aromatic && o !== i && mol.atoms[o].element === 'C';
       })
     );
   };
@@ -542,9 +547,11 @@ function draw(
     const sum = all.reduce((s, v) => s + v, 0);
     if (terminal) {
       const others = sidesA.length ? sidesA : sidesB;
-      const terminalAtom = sidesA.length ? b : a;
       const bothSides = others.includes(1) && others.includes(-1);
-      if (labels[terminalAtom] || bothSides || others.every((v) => v === 0)) return 0;
+      if (bothSides || others.every((v) => v === 0)) return 0;
+      // A labelled end (=CH2, =O) on a carbon whose other bonds all leave on one side is
+      // offset towards them, like any chain double bond: centred, its strokes would
+      // straddle the bare vertex, one stopping short of it and one overshooting it.
       return Math.sign(sum) || 1;
     }
     if (sum !== 0) return Math.sign(sum);
