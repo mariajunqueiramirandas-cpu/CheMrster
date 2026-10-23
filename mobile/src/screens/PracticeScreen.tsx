@@ -1,14 +1,14 @@
 /**
- * Practice: as many compounds as you like, by function and difficulty, with the same board and
- * explanations as the daily challenge. Nothing here counts toward the statistics.
+ * Practice: as many compounds as you like, by function and difficulty, typed and explained like
+ * the daily challenge. Nothing here counts toward the statistics.
  */
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { type Compound, TIER_LABEL, type Tier } from '../../../src/nomenclatura/catalog.ts';
 import { practicePick } from '../../../src/nomenclatura/daily.ts';
-import { problem, roundState } from '../../../src/nomenclatura/grade.ts';
-import { CATEGORY_LABEL, type Category, type Guess, SLOTS } from '../../../src/nomenclatura/pieces.ts';
-import { Round } from '../game/Round.tsx';
+import { check } from '../../../src/nomenclatura/check.ts';
+import { CATEGORY_LABEL, type Category } from '../../../src/nomenclatura/pieces.ts';
+import { Question } from '../game/Question.tsx';
 import { FONT, GUTTER, useTheme } from '../theme.ts';
 import { Segmented } from '../ui/controls.tsx';
 import { ArrowRightIcon } from '../ui/Icons.tsx';
@@ -29,7 +29,7 @@ export function PracticeScreen() {
   const [kind, setKind] = useState<Kind>('todos');
   const [level, setLevel] = useState<Level>(0);
   const [compound, setCompound] = useState<Compound>(() => practicePick(seed()));
-  const [guesses, setGuesses] = useState<Guess[]>([]);
+  const [answer, setAnswer] = useState<{ typed: string; correct: boolean }>();
   const [recent, setRecent] = useState<string[]>([]);
   const [score, setScore] = useState({ played: 0, won: 0, run: 0 });
 
@@ -37,18 +37,16 @@ export function PracticeScreen() {
     const next = practicePick(seed(), k === 'todos' ? undefined : k, l || undefined, [...recent, compound.id]);
     setRecent((r) => [...r, compound.id].slice(-12));
     setCompound(next);
-    setGuesses([]);
+    setAnswer(undefined);
   };
 
-  const onGuess = (g: Guess) => {
-    const why = problem(compound.category, g, guesses);
-    if (why) return why;
-    const clean = Object.fromEntries(SLOTS[compound.category].filter((s) => g[s] !== undefined).map((s) => [s, g[s]])) as Guess;
-    const next = [...guesses, clean];
-    setGuesses(next);
-    const st = roundState(compound, next);
-    if (st.done) setScore((s) => ({ played: s.played + 1, won: s.won + (st.won ? 1 : 0), run: st.won ? s.run + 1 : 0 }));
-    return null;
+  const onSubmit = (typed: string) => {
+    const result = check(compound, typed);
+    if (result.kind !== 'right' && result.kind !== 'wrong') return result;
+    const correct = result.kind === 'right';
+    setAnswer({ typed: typed.trim(), correct });
+    setScore((s) => ({ played: s.played + 1, won: s.won + (correct ? 1 : 0), run: correct ? s.run + 1 : 0 }));
+    return result;
   };
 
   const subtitle = score.played ? `Treino · ${score.won}/${score.played} acertos${score.run > 1 ? ` · ${score.run} seguidos` : ''}` : 'Treino livre';
@@ -93,18 +91,18 @@ export function PracticeScreen() {
           <Text style={[styles.levelText, { color: c.text }]}>{levelLabel(level)}</Text>
         </Press>
       </View>
-      <Round
+      <Question
         key={compound.id + recent.length}
         compound={compound}
-        guesses={guesses}
-        onGuess={onGuess}
+        answer={answer}
+        onSubmit={onSubmit}
         kicker={`Treino · ${CATEGORY_LABEL[compound.category].toLowerCase()}`}
       >
         <Btn kind="primary" wide label="Próximo composto" icon={(color) => <ArrowRightIcon color={color} />} onPress={() => pick(kind, level)} />
         <Txt variant="small" tone="muted" style={{ textAlign: 'center' }}>
           O treino não conta nas estatísticas do desafio.
         </Txt>
-      </Round>
+      </Question>
     </View>
   );
 }

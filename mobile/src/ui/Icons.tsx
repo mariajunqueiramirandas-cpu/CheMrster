@@ -272,18 +272,3 @@ export const HelpIcon = (p: IconProps) => (
     <Path d="M9.6 9.5a2.5 2.5 0 1 1 3.4 2.3c-.6.3-1 .8-1 1.5v.4M12 16.6h.01" />
   </Svg>
 );
-
-export const ShareIcon = (p: IconProps) => (
-  <Svg {...base(p)}>
-    <Path d="M12 15V4M7.5 8.5 12 4l4.5 4.5" />
-    <Path d="M6 12.5v6a1.5 1.5 0 0 0 1.5 1.5h9a1.5 1.5 0 0 0 1.5-1.5v-6" />
-  </Svg>
-);
-
-/** The delete key. */
-export const BackspaceIcon = (p: IconProps) => (
-  <Svg {...base(p)}>
-    <Path d="M9 5h10.5A1.5 1.5 0 0 1 21 6.5v11a1.5 1.5 0 0 1-1.5 1.5H9l-6-7 6-7Z" />
-    <Path d="m12 9.5 5 5M17 9.5l-5 5" />
-  </Svg>
-);

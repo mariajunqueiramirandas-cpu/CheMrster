@@ -1,7 +1,7 @@
-/** Form controls: segmented choices and switches. */
-import { StyleSheet, Switch, Text, View } from 'react-native';
+/** Form controls: segmented choices. */
+import { StyleSheet, Text, View } from 'react-native';
 import { FONT, useTheme } from '../theme.ts';
-import { Press, Txt } from './kit.tsx';
+import { Press } from './kit.tsx';
 
 /** One of a few options, as a row of pills on a sunken track. `columns` wraps them into rows. */
 export function Segmented<T extends string>({
@@ -46,28 +46,10 @@ export function Segmented<T extends string>({
   );
 }
 
-/** A labelled switch. */
-export function Toggle({ value, onChange, label }: { value: boolean; onChange: (v: boolean) => void; label: string }) {
-  const c = useTheme();
-  return (
-    <Press onPress={() => onChange(!value)} sink={0} style={styles.toggle} accessibilityRole="switch" accessibilityState={{ checked: value }} accessibilityLabel={label}>
-      <Switch
-        value={value}
-        onValueChange={onChange}
-        trackColor={{ false: c.rule, true: c.magenta }}
-        thumbColor="#ffffff"
-        importantForAccessibility="no"
-      />
-      <Txt style={{ flex: 1 }}>{label}</Txt>
-    </Press>
-  );
-}
-
 const styles = StyleSheet.create({
   segmented: { flexDirection: 'row', flexWrap: 'wrap', padding: 4, borderRadius: 14 },
   segment: { padding: 1 },
   segmentFace: { minHeight: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
   segmentText: { fontFamily: FONT.uiBold, fontSize: 15 },
   segmentTextSmall: { fontSize: 13.5 },
-  toggle: { flexDirection: 'row', alignItems: 'center', gap: 10 },
 });

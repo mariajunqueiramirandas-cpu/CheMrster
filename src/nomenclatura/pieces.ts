@@ -1,58 +1,30 @@
 /**
- * The pieces an inorganic name is built from, as Brazilian textbooks teach IUPAC nomenclature:
+ * The parts an inorganic name is built from, as Brazilian textbooks teach IUPAC nomenclature:
  * a prefix and a suffix around an element's root (hipo·clor·oso, hidrogeno·carbon·ato), and the
- * cation with its charge in Roman numerals (ferro(III)). The game's keyboard is these pieces, and
- * a guess is one piece (or none, where the slot is optional) per slot.
+ * cation with its charge in Roman numerals (ferro(III)). The catalog writes every name from its
+ * parts, so the spelling rules live in one place.
  */
 
 export type Category = 'acido' | 'base' | 'sal';
-export type Slot = 'prefixo' | 'radical' | 'sufixo' | 'cation' | 'valencia';
-
-/** One piece id per slot; a missing slot is "no piece" (no prefix, no Roman numeral). */
-export type Guess = Partial<Record<Slot, string>>;
 
 export const CATEGORIES: readonly Category[] = ['acido', 'base', 'sal'];
 
 export const CATEGORY_LABEL: Record<Category, string> = { acido: 'Ácido', base: 'Base', sal: 'Sal' };
 export const CATEGORY_PLURAL: Record<Category, string> = { acido: 'Ácidos', base: 'Bases', sal: 'Sais' };
-/** Lemon, soap and salt shaker: sour, slippery, salty. Used in the shared result. */
-export const CATEGORY_EMOJI: Record<Category, string> = { acido: '🍋', base: '🧼', sal: '🧂' };
 
-/** The slots of each kind of name, in reading order. */
-export const SLOTS: Record<Category, readonly Slot[]> = {
-  acido: ['prefixo', 'radical', 'sufixo'],
-  base: ['cation', 'valencia'],
-  sal: ['prefixo', 'radical', 'sufixo', 'cation', 'valencia'],
-};
+export type SuffixId = 'idrico' | 'ico' | 'oso' | 'eto' | 'ato' | 'ito';
 
-/** Slots that can stay empty: most names have no prefix, and fixed-charge cations no numeral. */
-export const OPTIONAL: readonly Slot[] = ['prefixo', 'valencia'];
+/** A name as its parts: prefix, element root and suffix for an acid or anion; cation and Roman numeral. */
+export interface Parts {
+  prefixo?: string;
+  radical?: string;
+  sufixo?: SuffixId;
+  cation?: string;
+  valencia?: string;
+}
 
-export const SLOT_LABEL: Record<Slot, string> = {
-  prefixo: 'Prefixo',
-  radical: 'Radical',
-  sufixo: 'Sufixo',
-  cation: 'Cátion',
-  valencia: 'Carga',
-};
-
-export interface Piece {
+export interface Radical {
   id: string;
-  slot: Slot;
-  /** As printed on the key: "hipo-", "clor", "-ato", "ferro", "III". */
-  label: string;
-  /** Pieces of one family are "close" to each other: -ito for -ato, per- for hipo-, II for III. */
-  family?: string;
-}
-
-export interface Prefix extends Piece {
-  slot: 'prefixo';
-  /** The keyboards it appears on. */
-  in: readonly Category[];
-}
-
-export interface Radical extends Piece {
-  slot: 'radical';
   /** As written in the formula. */
   symbol: string;
   /** The element's name, for explanations ("do enxofre"). */
@@ -65,16 +37,10 @@ export interface Radical extends Piece {
   oso: string;
 }
 
-export type SuffixId = 'idrico' | 'ico' | 'oso' | 'eto' | 'ato' | 'ito';
-
-export interface Suffix extends Piece {
-  slot: 'sufixo';
-  id: SuffixId;
-  in: Category;
-}
-
-export interface Cation extends Piece {
-  slot: 'cation';
+export interface Cation {
+  id: string;
+  /** As written in names: "sódio". */
+  label: string;
   /** As written in the formula: Fe, NH4. */
   symbol: string;
   /** Charges it forms. More than one means the name needs the Roman numeral. */
@@ -85,33 +51,7 @@ export interface Cation extends Piece {
   polyatomic?: boolean;
 }
 
-export interface Valence extends Piece {
-  slot: 'valencia';
-  value: number;
-}
-
-export const PREFIXES: readonly Prefix[] = [
-  { id: 'hipo', slot: 'prefixo', label: 'hipo-', family: 'nox', in: ['acido', 'sal'] },
-  { id: 'per', slot: 'prefixo', label: 'per-', family: 'nox', in: ['acido', 'sal'] },
-  { id: 'orto', slot: 'prefixo', label: 'orto-', family: 'agua', in: ['acido', 'sal'] },
-  { id: 'meta', slot: 'prefixo', label: 'meta-', family: 'agua', in: ['acido', 'sal'] },
-  { id: 'piro', slot: 'prefixo', label: 'piro-', family: 'agua', in: ['acido', 'sal'] },
-  { id: 'tio', slot: 'prefixo', label: 'tio-', in: ['acido', 'sal'] },
-  { id: 'di', slot: 'prefixo', label: 'di-', in: ['acido', 'sal'] },
-  { id: 'hidrogeno', slot: 'prefixo', label: 'hidrogeno-', family: 'h', in: ['sal'] },
-  { id: 'di-hidrogeno', slot: 'prefixo', label: 'di-hidrogeno-', family: 'h', in: ['sal'] },
-];
-
-const radical = (id: string, symbol: string, element: string, ico: string, oso = id): Radical => ({
-  id,
-  slot: 'radical',
-  label: id,
-  symbol,
-  element,
-  stem: id,
-  ico,
-  oso,
-});
+const radical = (id: string, symbol: string, element: string, ico: string, oso = id): Radical => ({ id, symbol, element, stem: id, ico, oso });
 
 export const RADICALS: readonly Radical[] = [
   radical('fluor', 'F', 'flúor', 'fluór'),
@@ -129,22 +69,13 @@ export const RADICALS: readonly Radical[] = [
   radical('cian', 'CN', 'cianogênio', 'ciân'),
 ];
 
-export const SUFFIXES: readonly Suffix[] = [
-  { id: 'idrico', slot: 'sufixo', label: '-ídrico', in: 'acido' },
-  { id: 'oso', slot: 'sufixo', label: '-oso', family: 'oxi', in: 'acido' },
-  { id: 'ico', slot: 'sufixo', label: '-ico', family: 'oxi', in: 'acido' },
-  { id: 'eto', slot: 'sufixo', label: '-eto', in: 'sal' },
-  { id: 'ito', slot: 'sufixo', label: '-ito', family: 'oxi', in: 'sal' },
-  { id: 'ato', slot: 'sufixo', label: '-ato', family: 'oxi', in: 'sal' },
-];
-
 const cation = (
   id: string,
   label: string,
   symbol: string,
   charges: number[],
   extra: Partial<Pick<Cation, 'traditional' | 'polyatomic'>> = {},
-): Cation => ({ id, slot: 'cation', label, symbol, charges, ...extra });
+): Cation => ({ id, label, symbol, charges, ...extra });
 
 export const CATIONS: readonly Cation[] = [
   cation('litio', 'lítio', 'Li', [1]),
@@ -169,35 +100,11 @@ export const CATIONS: readonly Cation[] = [
 
 export const ROMAN = ['', 'I', 'II', 'III', 'IV'] as const;
 
-export const VALENCES: readonly Valence[] = [1, 2, 3, 4].map((value) => ({
-  id: ROMAN[value],
-  slot: 'valencia',
-  label: ROMAN[value],
-  family: 'nox',
-  value,
-}));
+const RADICAL_BY_ID = new Map(RADICALS.map((r) => [r.id, r]));
+const CATION_BY_ID = new Map(CATIONS.map((c) => [c.id, c]));
 
-const ALL: readonly Piece[] = [...PREFIXES, ...RADICALS, ...SUFFIXES, ...CATIONS, ...VALENCES];
-const BY_KEY = new Map(ALL.map((p) => [`${p.slot}:${p.id}`, p]));
-
-export function piece(slot: Slot, id: string | undefined): Piece | undefined {
-  return id === undefined ? undefined : BY_KEY.get(`${slot}:${id}`);
-}
-
-export const radicalOf = (id: string) => piece('radical', id) as Radical | undefined;
-export const cationOf = (id: string) => piece('cation', id) as Cation | undefined;
-
-/** The keys of one kind of name, grouped by slot as the keyboard lays them out. */
-export function keyboard(category: Category): { slot: Slot; pieces: Piece[] }[] {
-  return SLOTS[category].map((slot) => ({
-    slot,
-    pieces: ALL.filter(
-      (p) =>
-        p.slot === slot &&
-        (p.slot === 'prefixo' ? (p as Prefix).in.includes(category) : p.slot === 'sufixo' ? (p as Suffix).in === category : true),
-    ),
-  }));
-}
+export const radicalOf = (id: string) => RADICAL_BY_ID.get(id);
+export const cationOf = (id: string) => CATION_BY_ID.get(id);
 
 const SUFFIX_TEXT: Record<SuffixId, (r: Radical) => string> = {
   idrico: (r) => `${r.stem}ídrico`,
@@ -214,34 +121,30 @@ function join(prefix: string, body: string): string {
   return prefix + body;
 }
 
-/** One word from its pieces: (hipo, clor, oso) → hipocloroso; (hidrogeno, carbon, ato) → hidrogenocarbonato. */
+/** One word from its parts: (hipo, clor, oso) → hipocloroso; (hidrogeno, carbon, ato) → hidrogenocarbonato. */
 export function word(prefix: string | undefined, radicalId: string, suffix: SuffixId): string {
   const r = radicalOf(radicalId);
-  if (!r) return '';
+  if (!r) throw new Error(`Radical desconhecido: ${radicalId}`);
   const body = SUFFIX_TEXT[suffix](r);
   return prefix ? join(prefix, body) : body;
 }
 
-const cationText = (g: Guess) => {
-  const c = g.cation ? cationOf(g.cation)?.label : undefined;
-  if (!c) return '…';
-  return g.valencia ? `${c}(${g.valencia})` : c;
+const cationText = (p: Parts) => {
+  const c = p.cation ? cationOf(p.cation) : undefined;
+  if (!c) throw new Error(`Cátion desconhecido: ${p.cation}`);
+  return p.valencia ? `${c.label}(${p.valencia})` : c.label;
 };
 
-const anionText = (g: Guess) =>
-  g.radical && g.sufixo ? word(g.prefixo, g.radical, g.sufixo as SuffixId) : g.prefixo ? `${g.prefixo}…` : '…';
+const anionText = (p: Parts) => word(p.prefixo, p.radical!, p.sufixo!);
 
-/**
- * The name a guess spells, as it would be written: "ácido hipocloroso", "hidróxido de ferro(III)",
- * "hidrogenocarbonato de sódio". Missing required pieces read as "…", so it also previews a draft.
- */
-export function compose(category: Category, g: Guess): string {
+/** The name the parts spell: "ácido hipocloroso", "hidróxido de ferro(III)", "hidrogenocarbonato de sódio". */
+export function compose(category: Category, p: Parts): string {
   switch (category) {
     case 'acido':
-      return `ácido ${anionText(g)}`;
+      return `ácido ${anionText(p)}`;
     case 'base':
-      return `hidróxido de ${cationText(g)}`;
+      return `hidróxido de ${cationText(p)}`;
     case 'sal':
-      return `${anionText(g)} de ${cationText(g)}`;
+      return `${anionText(p)} de ${cationText(p)}`;
   }
 }

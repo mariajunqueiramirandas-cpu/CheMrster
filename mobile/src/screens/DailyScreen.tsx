@@ -1,20 +1,21 @@
 /**
- * Today's challenge: the acid, the base and the salt of the day, played in any order. When the
- * third is done, the statistics come up with the result to share.
+ * Today's challenge: two acids, two bases and two salts, named one at a time by typing. After
+ * the last one, the day's summary: the score, the streak, every answer, and the countdown.
  */
+import { router } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { StyleSheet, Text, View, useWindowDimensions } from 'react-native';
-import { daily, puzzleDate } from '../../../src/nomenclatura/daily.ts';
-import { MAX_TRIES } from '../../../src/nomenclatura/grade.ts';
-import { CATEGORIES, CATEGORY_EMOJI, CATEGORY_LABEL, type Category } from '../../../src/nomenclatura/pieces.ts';
-import { type Round as RoundData, isComplete, roundsOf } from '../../../src/nomenclatura/play.ts';
-import { markHelpSeen, playGuess, saveStore, useSave } from '../../../src/nomenclatura/store.ts';
-import { useToday } from '../game/clock.ts';
-import { Round } from '../game/Round.tsx';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { DAILY_SIZE, daily, puzzleDate } from '../../../src/nomenclatura/daily.ts';
+import { CATEGORY_LABEL } from '../../../src/nomenclatura/pieces.ts';
+import { type Question as Q, questionsOf, stats } from '../../../src/nomenclatura/play.ts';
+import { answerDaily, markHelpSeen, saveStore, useSave } from '../../../src/nomenclatura/store.ts';
+import { useCountdown, useToday } from '../game/clock.ts';
+import { Formula } from '../game/Formula.tsx';
+import { Question } from '../game/Question.tsx';
 import { openSheet } from '../game/Sheets.tsx';
-import { FONT, GUTTER, useTheme, useTiles } from '../theme.ts';
-import { ArrowRightIcon, ChartIcon } from '../ui/Icons.tsx';
-import { Btn, Press } from '../ui/kit.tsx';
+import { COLUMN, FONT, GUTTER, useTheme } from '../theme.ts';
+import { ArrowRightIcon, ChartIcon, CheckIcon, ChevronRightIcon, CrossIcon, FlameIcon } from '../ui/Icons.tsx';
+import { Btn, Card, Press, Txt } from '../ui/kit.tsx';
 import { TopBar } from '../ui/TopBar.tsx';
 
 const dateLabel = (n: number) =>
@@ -22,46 +23,99 @@ const dateLabel = (n: number) =>
     .toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' })
     .replace(/\.| de/g, '');
 
-function status(r: RoundData): string {
-  if (r.state.won) return `${r.state.guesses.length}/${MAX_TRIES}`;
-  if (r.state.lost) return `X/${MAX_TRIES}`;
-  return r.state.guesses.length ? `${r.state.guesses.length}/${MAX_TRIES}` : 'jogar';
+/** One dot per compound: right, wrong, the one on screen, or still to come. Answered ones open again. */
+function Progress({ questions, index, onOpen }: { questions: Q[]; index: number; onOpen: (i: number) => void }) {
+  const c = useTheme();
+  const done = questions.filter((q) => q.answer).length;
+  return (
+    <View style={styles.progress}>
+      <View style={styles.dots}>
+        {questions.map((q, i) => {
+          const a = q.answer;
+          const here = i === index;
+          return (
+            <Press
+              key={i}
+              sink={0}
+              disabled={!a}
+              onPress={() => onOpen(i)}
+              accessibilityRole="button"
+              accessibilityLabel={`Composto ${i + 1}: ${a ? (a.correct ? 'certo' : 'errado') : 'a responder'}`}
+              style={[
+                styles.dot,
+                { borderColor: here ? c.magenta : a ? 'transparent' : c.rule, backgroundColor: a ? (a.correct ? c.right : c.wrong) : 'transparent' },
+              ]}
+            >
+              {a ? a.correct ? <CheckIcon color="#fff" width={14} height={14} strokeWidth={3} /> : <CrossIcon color="#fff" width={14} height={14} strokeWidth={3} /> : null}
+            </Press>
+          );
+        })}
+      </View>
+      <Text style={[styles.count, { color: c.muted }]}>
+        {done} de {DAILY_SIZE}
+      </Text>
+    </View>
+  );
 }
 
-function Tabs({ rounds, value, onChange }: { rounds: Record<Category, RoundData>; value: Category; onChange: (c: Category) => void }) {
+function Summary({ n, questions, onOpen }: { n: number; questions: Q[]; onOpen: (i: number) => void }) {
   const c = useTheme();
-  const tiles = useTiles();
-  const { width, height } = useWindowDimensions();
-  const short = height < 780;
+  const save = useSave();
+  const countdown = useCountdown();
+  const streak = useMemo(() => stats(save.days, n).streak, [save.days, n]);
+  const right = questions.filter((q) => q.answer?.correct).length;
   return (
-    <View style={styles.tabs} accessibilityRole="tablist">
-      {CATEGORIES.map((cat) => {
-        const r = rounds[cat];
-        const on = cat === value;
-        const look = r.state.won ? tiles.right : r.state.lost ? tiles.wrong : null;
+    <ScrollView contentContainerStyle={styles.summary}>
+      <Card style={styles.score}>
+        <Txt variant="kicker" tone="magenta">
+          Desafio #{n} completo
+        </Txt>
+        <Text style={[styles.scoreValue, { color: c.text }]}>
+          {right}/{DAILY_SIZE}
+        </Text>
+        <Txt tone="muted" style={{ textAlign: 'center' }}>
+          {right === DAILY_SIZE ? 'Todos os nomes certos!' : 'Toque num composto para rever o porquê do nome.'}
+        </Txt>
+        <View style={styles.streak}>
+          <FlameIcon color={c.magenta} />
+          <Txt variant="strong" tone="magenta">
+            {streak === 1 ? '1 dia seguido' : `${streak} dias seguidos`}
+          </Txt>
+        </View>
+        <Txt variant="small" tone="muted">
+          Próximo desafio em <Text style={{ fontFamily: FONT.uiBold, color: c.text }}>{countdown}</Text>
+        </Txt>
+      </Card>
+      {questions.map((q, i) => {
+        const a = q.answer!;
         return (
           <Press
-            key={cat}
+            key={i}
             sink={1}
-            onPress={() => onChange(cat)}
-            accessibilityRole="tab"
-            accessibilityState={{ selected: on }}
-            accessibilityLabel={`${CATEGORY_LABEL[cat]}: ${r.state.won ? 'acertou' : r.state.lost ? 'errou' : 'em aberto'}`}
-            style={[styles.tab, short && styles.tabShort, { borderColor: on ? c.magenta : c.rule, backgroundColor: on ? c.magentaWash : c.surface }]}
+            onPress={() => onOpen(i)}
+            accessibilityRole="button"
+            accessibilityLabel={`${q.compound.name}: ${a.correct ? 'certo' : `errado, você escreveu ${a.typed}`}. Ver explicação`}
+            style={[styles.row, { backgroundColor: c.surface, borderColor: c.rule }]}
           >
-            <Text style={[styles.tabLabel, { color: c.text }]}>
-              {short && width < 400 ? '' : `${CATEGORY_EMOJI[cat]} `}
-              {CATEGORY_LABEL[cat]}
-            </Text>
-            {(!short || r.state.guesses.length > 0) && (
-              <View style={[styles.badge, { backgroundColor: look?.bg ?? 'transparent' }]}>
-                <Text style={[styles.badgeText, { color: look?.fg ?? c.muted }]}>{status(r)}</Text>
-              </View>
-            )}
+            {a.correct ? <CheckIcon color={c.right} /> : <CrossIcon color={c.wrong} />}
+            <Formula formula={q.compound.formula} size={20} style={styles.rowFormula} />
+            <View style={{ flex: 1 }}>
+              <Txt variant="strong">{q.compound.name}</Txt>
+              {!a.correct && (
+                <Txt variant="small" tone="muted" numberOfLines={1}>
+                  Você: {a.typed}
+                </Txt>
+              )}
+            </View>
+            <ChevronRightIcon color={c.muted} width={18} height={18} />
           </Press>
         );
       })}
-    </View>
+      <View style={styles.actions}>
+        <Btn label="Estatísticas" icon={(color) => <ChartIcon color={color} />} onPress={() => openSheet('stats')} style={{ flex: 1 }} />
+        <Btn kind="primary" label="Treinar mais" onPress={() => router.navigate('/treino')} style={{ flex: 1 }} />
+      </View>
+    </ScrollView>
   );
 }
 
@@ -70,20 +124,21 @@ export function DailyScreen() {
   const n = useToday();
   const save = useSave();
   const today = useMemo(() => daily(n), [n]);
-  const rounds = useMemo(() => roundsOf(n, save.days[n], today), [n, save.days, today]);
-  const firstOpen = (r: Record<Category, RoundData>) => CATEGORIES.find((cat) => !r[cat].state.done) ?? 'acido';
-  const [cat, setCat] = useState<Category>(() => firstOpen(rounds));
-  const complete = isComplete(rounds);
+  const day = save.days[n];
+  const questions = useMemo(() => questionsOf(n, day, today), [n, day, today]);
+  const answered = day?.length ?? 0;
+  // The question on screen; DAILY_SIZE is the summary.
+  const [index, setIndex] = useState(answered);
 
-  // A new day starts on its first open round.
+  // A new day starts at its first open question.
   const shownDay = useRef(n);
   useEffect(() => {
     if (shownDay.current === n) return;
     shownDay.current = n;
-    setCat(firstOpen(roundsOf(n, saveStore.get().days[n])));
+    setIndex(saveStore.get().days[n]?.length ?? 0);
   }, [n]);
 
-  // First visit: how to play.
+  // First visit: how it works.
   useEffect(() => {
     if (!saveStore.get().helpSeen) {
       const t = setTimeout(() => openSheet('help'), 400);
@@ -91,56 +146,50 @@ export function DailyScreen() {
     }
   }, []);
 
-  // Finishing the day here brings up the statistics, once the last tiles have turned.
-  const wasComplete = useRef(complete);
-  useEffect(() => {
-    if (complete && !wasComplete.current) {
-      const t = setTimeout(() => openSheet('stats'), 2600);
-      wasComplete.current = true;
-      return () => clearTimeout(t);
-    }
-    wasComplete.current = complete;
-  }, [complete]);
-
-  const next = CATEGORIES.find((k) => k !== cat && !rounds[k].state.done);
-  const round = rounds[cat];
+  const q = questions[index];
+  const finished = answered >= DAILY_SIZE;
+  // After the answer on screen: on to the next open question, back to it, or to the summary.
+  const onward = finished
+    ? { label: 'Ver resultado do dia', to: DAILY_SIZE }
+    : index < answered - 1
+      ? { label: 'Voltar ao desafio', to: answered }
+      : { label: 'Próximo composto', to: answered };
 
   return (
     <View style={[styles.root, { backgroundColor: c.bench }]}>
       <TopBar subtitle={`Desafio #${n} · ${dateLabel(n)}`} />
-      <Tabs rounds={rounds} value={cat} onChange={setCat} />
-      <Round
-        key={`${n}:${cat}:${round.compound.id}`}
-        compound={round.compound}
-        guesses={round.state.guesses}
-        onGuess={(g) => {
-          markHelpSeen();
-          return playGuess(n, round.compound, g);
-        }}
-        kicker={`${CATEGORY_LABEL[cat]} do dia`}
-      >
-        {next ? (
-          <Btn
-            kind="primary"
-            wide
-            label={`Próximo: ${CATEGORY_LABEL[next].toLowerCase()}`}
-            icon={(color) => <ArrowRightIcon color={color} />}
-            onPress={() => setCat(next)}
-          />
-        ) : (
-          <Btn kind="primary" wide label="Ver resultado do dia" icon={(color) => <ChartIcon color={color} />} onPress={() => openSheet('stats')} />
-        )}
-      </Round>
+      <Progress questions={questions} index={index} onOpen={setIndex} />
+      {q ? (
+        <Question
+          key={`${n}:${index}`}
+          compound={q.compound}
+          kicker={`${CATEGORY_LABEL[q.compound.category]} · ${index + 1} de ${DAILY_SIZE}`}
+          answer={q.answer}
+          onSubmit={(typed) => {
+            markHelpSeen();
+            return answerDaily(n, index, q.compound, typed);
+          }}
+        >
+          <Btn kind="primary" wide label={onward.label} icon={(color) => <ArrowRightIcon color={color} />} onPress={() => setIndex(onward.to)} />
+        </Question>
+      ) : (
+        <Summary n={n} questions={questions} onOpen={setIndex} />
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  tabs: { flexDirection: 'row', gap: 6, paddingHorizontal: GUTTER, paddingBottom: 8, width: '100%', maxWidth: 600, alignSelf: 'center' },
-  tab: { flex: 1, borderWidth: 2, borderRadius: 12, paddingVertical: 5, paddingHorizontal: 6, alignItems: 'center', gap: 2 },
-  tabShort: { flexDirection: 'row', justifyContent: 'center', gap: 4, paddingVertical: 4, paddingHorizontal: 2 },
-  tabLabel: { fontFamily: FONT.uiBold, fontSize: 14 },
-  badge: { borderRadius: 6, paddingHorizontal: 6, minWidth: 34, alignItems: 'center' },
-  badgeText: { fontFamily: FONT.uiBold, fontSize: 12 },
+  progress: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: GUTTER, paddingBottom: 10, width: '100%', maxWidth: COLUMN, alignSelf: 'center' },
+  dots: { flex: 1, flexDirection: 'row', gap: 6 },
+  dot: { width: 26, height: 26, borderRadius: 13, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
+  count: { fontFamily: FONT.uiBold, fontSize: 14 },
+  summary: { paddingHorizontal: GUTTER, paddingTop: 4, paddingBottom: 32, gap: 10, width: '100%', maxWidth: COLUMN, alignSelf: 'center' },
+  score: { gap: 6, alignItems: 'center' },
+  scoreValue: { fontFamily: FONT.displayHeavy, fontSize: 48, lineHeight: 54 },
+  streak: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 2, borderRadius: 12, paddingVertical: 10, paddingHorizontal: 12 },
+  rowFormula: { minWidth: 76 },
+  actions: { flexDirection: 'row', gap: 8, marginTop: 6 },
 });

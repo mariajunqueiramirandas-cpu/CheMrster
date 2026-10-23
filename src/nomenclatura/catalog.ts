@@ -1,21 +1,11 @@
 /**
  * Every compound the game asks about: the acids, bases and salts of ENEM chemistry, each with
- * its formula, the pieces of its IUPAC name, how hard it is, and (for many) where it shows up.
- * Formulas of bases and salts are built from their ions, so a formula and its name cannot drift.
+ * its formula, the parts of its IUPAC name, how hard it is, its other names, and (for many)
+ * where it shows up. Formulas of bases and salts are built from their ions, so a formula and its
+ * name cannot drift.
  */
 import { type IonSpec, compound as neutral, counts } from './formula.ts';
-import {
-  type Cation,
-  type Category,
-  type Guess,
-  type Radical,
-  type SuffixId,
-  ROMAN,
-  cationOf,
-  compose,
-  radicalOf,
-  word,
-} from './pieces.ts';
+import { type Cation, type Category, type Parts, type Radical, type SuffixId, ROMAN, cationOf, compose, radicalOf, word } from './pieces.ts';
 
 /** 1: the classics; 2: Roman numerals, hipo-/per-, hydrogen salts; 3: the rest of the textbook. */
 export type Tier = 1 | 2 | 3;
@@ -43,12 +33,16 @@ export interface Compound {
   category: Category;
   formula: string;
   tier: Tier;
-  /** Accepted answers; the first is the name the game shows. */
-  answers: readonly Guess[];
+  /** The parts of each accepted IUPAC name; the first is the name the game shows. */
+  answers: readonly Parts[];
+  /** The accepted IUPAC names, written out: "ácido fosfórico", "ácido ortofosfórico". */
+  names: readonly string[];
   /** The IUPAC name: "sulfato de ferro(III)". */
   name: string;
-  /** Other names in use: traditional ("sulfato férrico") and everyday ("soda cáustica"). */
-  aka: readonly string[];
+  /** Traditional names: "sulfato férrico", "bicarbonato de sódio". */
+  traditional: readonly string[];
+  /** Everyday and trade names: "soda cáustica", "barrilha". */
+  common: readonly string[];
   /** Where it shows up: the kitchen, the lab, the exam. */
   fact?: string;
   /** Bases and salts. */
@@ -118,12 +112,12 @@ export function anionOf(name: string): Anion {
 
 const isPolyatomic = (formula: string) => Object.values(counts(formula)).reduce((s, n) => s + n, 0) > 1;
 
-/** The pieces of an anion's name, and the variants with its other prefixes. */
-const anionGuesses = (a: Anion): Guess[] =>
+/** The parts of an anion's name, and the variants with its other prefixes. */
+const anionParts = (a: Anion): Parts[] =>
   [a.prefixo, ...(a.alsoPrefix ?? [])].map((prefixo) => ({ prefixo, radical: a.radical, sufixo: a.sufixo }));
 
-/** Drops the keys whose value is undefined, so stored guesses and answers compare cleanly. */
-const clean = (g: Guess): Guess => Object.fromEntries(Object.entries(g).filter(([, v]) => v !== undefined)) as Guess;
+/** Drops the keys whose value is undefined. */
+const clean = (p: Parts): Parts => Object.fromEntries(Object.entries(p).filter(([, v]) => v !== undefined)) as Parts;
 
 type AcidDef = [formula: string, prefixo: string | undefined, radical: string, sufixo: 'idrico' | 'oso' | 'ico', tier: Tier, extra?: { also?: string[]; fact?: string }];
 
@@ -165,13 +159,13 @@ const ACID_DEFS: AcidDef[] = [
   ['HSCN', 'tio', 'cian', 'ico', 3],
 ];
 
-type BaseDef = [cation: string, charge: number, tier: Tier, extra?: { aka?: string[]; fact?: string }];
+type BaseDef = [cation: string, charge: number, tier: Tier, extra?: { common?: string[]; fact?: string }];
 
 const BASE_DEFS: BaseDef[] = [
-  ['sodio', 1, 1, { aka: ['soda cáustica'], fact: 'A soda cáustica: desentope pias e transforma gordura em sabão.' }],
-  ['potassio', 1, 1, { aka: ['potassa cáustica'] }],
+  ['sodio', 1, 1, { common: ['soda cáustica'], fact: 'A soda cáustica: desentope pias e transforma gordura em sabão.' }],
+  ['potassio', 1, 1, { common: ['potassa cáustica'] }],
   ['litio', 1, 1],
-  ['calcio', 2, 1, { aka: ['cal hidratada', 'cal extinta'], fact: 'A cal hidratada das obras e da caiação; dissolvida, é a água de cal.' }],
+  ['calcio', 2, 1, { common: ['cal hidratada', 'cal extinta'], fact: 'A cal hidratada das obras e da caiação; dissolvida, é a água de cal.' }],
   ['magnesio', 2, 1, { fact: 'Em suspensão na água, é o leite de magnésia, um antiácido.' }],
   ['bario', 2, 1],
   ['aluminio', 3, 1, { fact: 'É antiácido e se forma no tratamento de água, em flocos que arrastam a sujeira.' }],
@@ -195,11 +189,11 @@ const BASE_DEFS: BaseDef[] = [
   ['ouro', 3, 3],
 ];
 
-type SaltDef = [cation: string, charge: number, anion: string, tier: Tier, extra?: { aka?: string[]; fact?: string }];
+type SaltDef = [cation: string, charge: number, anion: string, tier: Tier, extra?: { common?: string[]; fact?: string }];
 
 const SALT_DEFS: SaltDef[] = [
   // Tier 1: the classics.
-  ['sodio', 1, 'cloreto', 1, { aka: ['sal de cozinha'], fact: 'O sal de cozinha; a 0,9% em água, é o soro fisiológico.' }],
+  ['sodio', 1, 'cloreto', 1, { common: ['sal de cozinha'], fact: 'O sal de cozinha; a 0,9% em água, é o soro fisiológico.' }],
   ['potassio', 1, 'cloreto', 1, { fact: 'Substitui parte do cloreto de sódio no sal light.' }],
   ['litio', 1, 'cloreto', 1, { fact: 'Dá aos fogos de artifício uma chama vermelha.' }],
   ['sodio', 1, 'fluoreto', 1, { fact: 'Fonte de flúor de cremes dentais e enxaguantes: fortalece o esmalte dos dentes.' }],
@@ -214,21 +208,21 @@ const SALT_DEFS: SaltDef[] = [
   ['sodio', 1, 'sulfeto', 1],
   ['sodio', 1, 'sulfato', 1],
   ['potassio', 1, 'sulfato', 1],
-  ['magnesio', 2, 'sulfato', 1, { aka: ['sal amargo', 'sal de Epsom'] }],
+  ['magnesio', 2, 'sulfato', 1, { common: ['sal amargo', 'sal de Epsom'] }],
   ['calcio', 2, 'sulfato', 1, { fact: 'Hidratado, é o gesso das obras e das imobilizações.' }],
   ['bario', 2, 'sulfato', 1, { fact: 'Contraste de raio X: tão insolúvel que não intoxica. Em 2003, um lote contaminado com carbonato de bário, que se dissolve no estômago, causou mortes no Brasil.' }],
   ['zinco', 2, 'sulfato', 1],
   ['sodio', 1, 'sulfito', 1, { fact: 'Conservante de alimentos e bebidas (INS 221).' }],
   ['sodio', 1, 'nitrito', 1, { fact: 'Conservante de embutidos (INS 250): mantém a carne rosada.' }],
-  ['sodio', 1, 'nitrato', 1, { aka: ['salitre do Chile'] }],
-  ['potassio', 1, 'nitrato', 1, { aka: ['salitre'], fact: 'O salitre, ingrediente da pólvora negra.' }],
+  ['sodio', 1, 'nitrato', 1, { common: ['salitre do Chile'] }],
+  ['potassio', 1, 'nitrato', 1, { common: ['salitre'], fact: 'O salitre, ingrediente da pólvora negra.' }],
   ['calcio', 2, 'nitrato', 1],
   ['bario', 2, 'nitrato', 1, { fact: 'Dá aos fogos de artifício uma chama verde.' }],
   ['prata', 1, 'nitrato', 1],
   ['prata', 1, 'cloreto', 1, { fact: 'Um precipitado branco que escurece à luz: a base da fotografia em filme.' }],
   ['amonio', 1, 'cloreto', 1, { fact: 'Eletrólito das pilhas secas comuns (pilha de Leclanché).' }],
   ['amonio', 1, 'nitrato', 1, { fact: 'Fertilizante nitrogenado; mal armazenado, causou a explosão do porto de Beirute em 2020.' }],
-  ['sodio', 1, 'carbonato', 1, { aka: ['barrilha'], fact: 'A barrilha, matéria-prima do vidro e corretor de pH de piscinas.' }],
+  ['sodio', 1, 'carbonato', 1, { common: ['barrilha'], fact: 'A barrilha, matéria-prima do vidro e corretor de pH de piscinas.' }],
   ['potassio', 1, 'carbonato', 1],
   ['calcio', 2, 'carbonato', 1, { fact: 'Calcário, mármore, casca de ovo e conchas.' }],
   ['magnesio', 2, 'carbonato', 1, { fact: 'O "pó de magnésio" que ginastas e escaladores passam nas mãos.' }],
@@ -248,7 +242,7 @@ const SALT_DEFS: SaltDef[] = [
   ['aluminio', 3, 'fosfato', 2],
   ['amonio', 1, 'sulfato', 2, { fact: 'Fertilizante que fornece nitrogênio e enxofre.' }],
   ['amonio', 1, 'perclorato', 2, { fact: 'O oxidante do combustível sólido de foguetes.' }],
-  ['calcio', 2, 'fluoreto', 2, { aka: ['fluorita'] }],
+  ['calcio', 2, 'fluoreto', 2, { common: ['fluorita'] }],
   ['potassio', 1, 'clorato', 2, { fact: 'Oxidante da cabeça dos palitos de fósforo.' }],
   ['potassio', 1, 'iodato', 2, { fact: 'É ele que o Brasil adiciona ao sal de cozinha para prevenir o bócio.' }],
   ['potassio', 1, 'permanganato', 2, { fact: 'Violeta intenso: antisséptico e oxidante de laboratório.' }],
@@ -258,7 +252,7 @@ const SALT_DEFS: SaltDef[] = [
   ['potassio', 1, 'sulfeto', 2],
   ['sodio', 1, 'cianeto', 2, { fact: 'Usado para extrair ouro na mineração; muito tóxico.' }],
   ['potassio', 1, 'cianeto', 2],
-  ['sodio', 1, 'silicato', 2, { aka: ['vidro líquido'] }],
+  ['sodio', 1, 'silicato', 2, { common: ['vidro líquido'] }],
   ['ferro', 2, 'cloreto', 2],
   ['ferro', 3, 'cloreto', 2, { fact: 'Vendido como "percloreto de ferro" para corroer placas de circuito, mas o nome certo é este.' }],
   ['ferro', 2, 'sulfato', 2, { fact: 'Suplemento de ferro contra a anemia.' }],
@@ -289,8 +283,8 @@ const SALT_DEFS: SaltDef[] = [
   ['sodio', 1, 'tiossulfato', 3, { fact: 'Fixador fotográfico; também neutraliza o cloro da água de aquários.' }],
   ['sodio', 1, 'hidrogenofosfato', 3],
   ['sodio', 1, 'di-hidrogenofosfato', 3],
-  ['amonio', 1, 'di-hidrogenofosfato', 3, { aka: ['MAP'], fact: 'Fertilizante (MAP): fornece nitrogênio e fósforo.' }],
-  ['amonio', 1, 'hidrogenofosfato', 3, { aka: ['DAP'], fact: 'Fertilizante (DAP): fornece nitrogênio e fósforo.' }],
+  ['amonio', 1, 'di-hidrogenofosfato', 3, { common: ['MAP'], fact: 'Fertilizante (MAP): fornece nitrogênio e fósforo.' }],
+  ['amonio', 1, 'hidrogenofosfato', 3, { common: ['DAP'], fact: 'Fertilizante (DAP): fornece nitrogênio e fósforo.' }],
   ['calcio', 2, 'di-hidrogenofosfato', 3, { fact: 'O principal componente do superfosfato, um fertilizante.' }],
   ['amonio', 1, 'fosfato', 3],
   ['sodio', 1, 'hidrogenossulfito', 3],
@@ -325,13 +319,13 @@ const SALT_DEFS: SaltDef[] = [
   ['aluminio', 3, 'sulfeto', 3],
   ['ferro', 3, 'fosfato', 3],
   ['ferro', 2, 'fosfato', 3],
-  ['ferro', 2, 'carbonato', 3, { aka: ['siderita'] }],
+  ['ferro', 2, 'carbonato', 3, { common: ['siderita'] }],
   ['ferro', 3, 'brometo', 3],
   ['ferro', 2, 'brometo', 3],
   ['cobre', 2, 'sulfeto', 3],
   ['cobre', 1, 'sulfeto', 3],
   ['cobre', 1, 'iodeto', 3],
-  ['chumbo', 2, 'sulfeto', 3, { aka: ['galena'], fact: 'A galena, principal minério de chumbo.' }],
+  ['chumbo', 2, 'sulfeto', 3, { common: ['galena'], fact: 'A galena, principal minério de chumbo.' }],
   ['chumbo', 2, 'carbonato', 3],
   ['chumbo', 4, 'cloreto', 3],
   ['chumbo', 4, 'fluoreto', 3],
@@ -352,13 +346,14 @@ const SALT_DEFS: SaltDef[] = [
 
 function acid([formula, prefixo, radical, sufixo, tier, extra]: AcidDef): Compound {
   const answers = [prefixo, ...(extra?.also ?? [])].map((p) => clean({ prefixo: p, radical, sufixo }));
-  return { id: formula, category: 'acido', formula, tier, answers, name: compose('acido', answers[0]), aka: [], fact: extra?.fact };
+  const names = answers.map((a) => compose('acido', a));
+  return { id: formula, category: 'acido', formula, tier, answers, names, name: names[0], traditional: [], common: [], fact: extra?.fact };
 }
 
 const cationIon = (c: Cation, charge: number): IonSpec => ({ formula: c.symbol, charge, polyatomic: !!c.polyatomic });
 
-/** The cation's pieces: the Roman numeral only where the metal has more than one charge. */
-const cationGuess = (c: Cation, charge: number): Guess => clean({ cation: c.id, valencia: c.charges.length > 1 ? ROMAN[charge] : undefined });
+/** The cation's parts: the Roman numeral only where the metal has more than one charge. */
+const cationParts = (c: Cation, charge: number): Parts => clean({ cation: c.id, valencia: c.charges.length > 1 ? ROMAN[charge] : undefined });
 
 function needCation(id: string, charge: number): Cation {
   const c = cationOf(id);
@@ -368,17 +363,20 @@ function needCation(id: string, charge: number): Cation {
 
 function base([id, charge, tier, extra]: BaseDef): Compound {
   const c = needCation(id, charge);
-  const answers = [cationGuess(c, charge)];
+  const answers = [cationParts(c, charge)];
   const traditional = c.traditional?.[charge];
   const formula = neutral(cationIon(c, charge), { formula: 'OH', charge: 1, polyatomic: true });
+  const names = answers.map((a) => compose('base', a));
   return {
     id: formula,
     category: 'base',
     formula,
     tier,
     answers,
-    name: compose('base', answers[0]),
-    aka: [...(traditional ? [`hidróxido ${traditional}`] : []), ...(extra?.aka ?? [])],
+    names,
+    name: names[0],
+    traditional: traditional ? [`hidróxido ${traditional}`] : [],
+    common: extra?.common ?? [],
     fact: extra?.fact,
     cation: { piece: c, charge },
   };
@@ -388,21 +386,20 @@ function salt([id, charge, anionName, tier, extra]: SaltDef): Compound {
   const c = needCation(id, charge);
   const a = anionOf(anionName);
   const formula = neutral(cationIon(c, charge), { formula: a.formula, charge: a.charge, polyatomic: isPolyatomic(a.formula) });
-  const answers = anionGuesses(a).map((g) => clean({ ...g, ...cationGuess(c, charge) }));
+  const answers = anionParts(a).map((p) => clean({ ...p, ...cationParts(c, charge) }));
   const traditional = c.traditional?.[charge];
   const plainCation = c.charges.length > 1 ? `${c.label}(${ROMAN[charge]})` : c.label;
+  const names = answers.map((p) => compose('sal', p));
   return {
     id: formula,
     category: 'sal',
     formula,
     tier,
     answers,
-    name: compose('sal', answers[0]),
-    aka: [
-      ...(traditional ? [`${a.name} ${traditional}`] : []),
-      ...(a.common ? [`${a.common} de ${plainCation}`] : []),
-      ...(extra?.aka ?? []),
-    ],
+    names,
+    name: names[0],
+    traditional: [...(traditional ? [`${a.name} ${traditional}`] : []), ...(a.common ? [`${a.common} de ${plainCation}`] : [])],
+    common: extra?.common ?? [],
     fact: extra?.fact,
     cation: { piece: c, charge },
     anion: a,

@@ -1,11 +1,11 @@
-This is CheMrster's nomenclature game, *Nomenclatura do dia*: a Wordle-style daily IUPAC naming
-challenge (acids, bases and salts) for Android and the web, an Expo/React Native application.
+This is CheMrster's *Nomenclatura do dia*: a daily challenge where you type the IUPAC names of
+acids, bases and salts, for Android and the web, an Expo/React Native application.
 Prioritize mobile-first patterns, performance, and cross-platform compatibility.
 
 ## Shared code
 
 The game's rules do not live in this folder: the app imports its engine from `../src/nomenclatura`
-(pieces, catalog, grading, daily puzzle, explanations, statistics), and the stores' plumbing from
+(name parts, catalog, answer checking, the daily challenge, explanations, statistics), and the stores' plumbing from
 `../src/app/persist.ts` and `../src/app/toast.ts` (`metro.config.js` resolves their packages from
 this folder's `node_modules`). Fix logic there, where `npm test` at the repository root covers it;
 this folder holds only the native screens. Shared modules must not touch the DOM; the stores persist

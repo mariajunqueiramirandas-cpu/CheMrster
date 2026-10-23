@@ -1,13 +1,13 @@
-/** The daily games, kept on the device (localStorage, which the Android app backs with SQLite). */
+/** The daily challenges played, kept on the device (localStorage, which the Android app backs with SQLite). */
 import { persisted, usePersisted } from '../app/persist.ts';
 import type { Compound } from './catalog.ts';
-import { MAX_TRIES, problem, roundState } from './grade.ts';
-import { CATEGORIES, type Category, type Guess, SLOTS } from './pieces.ts';
-import type { DayPlay, Days } from './play.ts';
+import { type Check, check } from './check.ts';
+import { DAILY_SIZE } from './daily.ts';
+import type { Answer, DayPlay, Days } from './play.ts';
 
 export interface Save {
   days: Days;
-  /** The how-to-play sheet opens by itself until it has been seen once. */
+  /** The how-it-works sheet opens by itself until it has been seen once. */
   helpSeen: boolean;
 }
 
@@ -15,24 +15,8 @@ const EMPTY: Save = { days: {}, helpSeen: false };
 
 const isRecord = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 
-function reviveGuess(v: unknown): Guess | null {
-  if (!isRecord(v)) return null;
-  const g: Guess = {};
-  for (const slot of SLOTS.sal) if (typeof v[slot] === 'string') g[slot] = v[slot] as string;
-  return g;
-}
-
-function reviveDay(v: unknown): DayPlay | null {
-  if (!isRecord(v)) return null;
-  const day: DayPlay = {};
-  for (const cat of CATEGORIES) {
-    const r = v[cat];
-    if (!isRecord(r) || typeof r.id !== 'string' || !Array.isArray(r.guesses)) continue;
-    const guesses = r.guesses.map(reviveGuess).filter((g): g is Guess => !!g).slice(0, MAX_TRIES);
-    day[cat] = { id: r.id, guesses };
-  }
-  return day;
-}
+const isAnswer = (v: unknown): v is Answer =>
+  isRecord(v) && typeof v.id === 'string' && typeof v.typed === 'string' && typeof v.correct === 'boolean';
 
 /** Whatever was stored, as a valid save: unknown or broken entries are dropped. */
 export function revive(stored: unknown): Save {
@@ -40,35 +24,38 @@ export function revive(stored: unknown): Save {
   const days: Days = {};
   if (isRecord(stored.days)) {
     for (const [key, value] of Object.entries(stored.days)) {
-      const day = /^\d+$/.test(key) ? reviveDay(value) : null;
-      if (day) days[key] = day;
+      if (!/^\d+$/.test(key) || !Array.isArray(value)) continue;
+      const day: DayPlay = [];
+      // Answers count in order; anything after a broken one is dropped with it.
+      for (const a of value.slice(0, DAILY_SIZE)) {
+        if (!isAnswer(a)) break;
+        day.push({ id: a.id, typed: a.typed, correct: a.correct });
+      }
+      if (day.length) days[key] = day;
     }
   }
   return { days, helpSeen: stored.helpSeen === true };
 }
 
-export const saveStore = persisted<Save>('chemrster:nomenclatura:v1', revive);
+export const saveStore = persisted<Save>('chemrster:nomenclatura:v2', revive);
 
 export const useSave = () => usePersisted(saveStore);
 
 /**
- * Plays a guess in puzzle `n`'s round. Returns why it was refused, or null when it counted.
- * A finished round takes no more guesses.
+ * Answers question `index` of challenge `n` with what was typed. A right or wrong name is kept;
+ * an empty one, or another name of the compound, is not (the player tries again). Questions are
+ * answered in order, once each.
  */
-export function playGuess(n: number, compound: Compound, guess: Guess): string | null {
-  const cat: Category = compound.category;
-  const day = saveStore.get().days[n] ?? {};
-  const round = day[cat]?.id === compound.id ? day[cat] : undefined;
-  const guesses = round?.guesses ?? [];
-  if (roundState(compound, guesses).done) return 'Essa rodada já terminou';
-  const why = problem(cat, guess, guesses);
-  if (why) return why;
-  const clean = Object.fromEntries(SLOTS[cat].filter((s) => guess[s] !== undefined).map((s) => [s, guess[s]])) as Guess;
-  saveStore.set((s) => ({
-    ...s,
-    days: { ...s.days, [n]: { ...s.days[n], [cat]: { id: compound.id, guesses: [...guesses, clean] } } },
-  }));
-  return null;
+export function answerDaily(n: number, index: number, compound: Compound, typed: string): Check {
+  const day = saveStore.get().days[n] ?? [];
+  // Already answered, or out of order: nothing to record.
+  if (index !== day.length || index >= DAILY_SIZE) return { kind: 'empty' };
+  const result = check(compound, typed);
+  if (result.kind === 'right' || result.kind === 'wrong') {
+    const answer: Answer = { id: compound.id, typed: typed.trim(), correct: result.kind === 'right' };
+    saveStore.set((s) => ({ ...s, days: { ...s.days, [n]: [...day, answer] } }));
+  }
+  return result;
 }
 
 export function markHelpSeen() {

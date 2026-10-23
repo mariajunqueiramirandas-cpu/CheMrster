@@ -5,7 +5,7 @@
  */
 import { type Compound, parentAcid, radicalFor } from './catalog.ts';
 import { balance, counts, ionText, pretty } from './formula.ts';
-import { ROMAN, compose } from './pieces.ts';
+import { ROMAN } from './pieces.ts';
 
 interface Step {
   nox: number;
@@ -159,7 +159,7 @@ const STEPS = { acido: acidSteps, base: baseSteps, sal: saltSteps };
 export function explain(c: Compound): string[] {
   const lines = STEPS[c.category](c);
   // Fosfato is also ortofosfato, silicato also metassilicato.
-  const others = c.answers.slice(1).map((g) => `**${compose(c.category, g)}**`);
+  const others = c.names.slice(1).map((name) => `**${name}**`);
   if (others.length) lines.push(`Também vale: ${others.join(', ')}.`);
   return lines;
 }

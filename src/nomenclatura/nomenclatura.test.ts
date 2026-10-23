@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { ANIONS, COMPOUNDS, compoundById, ofCategory, parentAcid } from './catalog.ts';
-import { daily, msToNext, practicePick, puzzleDate, puzzleNumber, tierOf } from './daily.ts';
+import { check, normalize } from './check.ts';
+import { DAILY_SIZE, daily, msToNext, practicePick, puzzleDate, puzzleNumber } from './daily.ts';
 import { explain } from './explain.ts';
 import { counts, ionText, pretty, runs } from './formula.ts';
-import { MAX_TRIES, grade, keyStates, problem, roundState, verdict } from './grade.ts';
-import { CATEGORIES, type Guess, SLOTS, compose, keyboard, word } from './pieces.ts';
-import { type Days, roundsOf, shareText, stats } from './play.ts';
-import { playGuess, revive, saveStore } from './store.ts';
+import { CATEGORIES, word } from './pieces.ts';
+import { type DayPlay, type Days, questionsOf, stats } from './play.ts';
+import { answerDaily, revive, saveStore } from './store.ts';
 
 const byId = (id: string) => {
   const c = compoundById(id);
@@ -57,17 +57,12 @@ describe('names', () => {
     expect(byId(formula).name).toBe(name);
   });
 
-  it('previews drafts with gaps', () => {
-    expect(compose('acido', {})).toBe('ácido …');
-    expect(compose('sal', { cation: 'ferro', valencia: 'II' })).toBe('… de ferro(II)');
-    expect(compose('base', { cation: 'sodio' })).toBe('hidróxido de sódio');
-  });
-
   it('gives traditional and everyday names', () => {
-    expect(byId('Fe2(SO4)3').aka).toContain('sulfato férrico');
-    expect(byId('NaHCO3').aka).toContain('bicarbonato de sódio');
-    expect(byId('Cu(OH)2').aka).toContain('hidróxido cúprico');
-    expect(byId('NaOH').aka).toContain('soda cáustica');
+    expect(byId('Fe2(SO4)3').traditional).toContain('sulfato férrico');
+    expect(byId('NaHCO3').traditional).toContain('bicarbonato de sódio');
+    expect(byId('Cu(OH)2').traditional).toContain('hidróxido cúprico');
+    expect(byId('NaOH').common).toContain('soda cáustica');
+    expect(byId('H3PO4').names).toEqual(['ácido fosfórico', 'ácido ortofosfórico']);
   });
 
   it('traces anions back to their acids', () => {
@@ -80,8 +75,11 @@ describe('names', () => {
 });
 
 describe('catalog', () => {
-  it('has unique formulas and enough of every category and tier for the daily rotation', () => {
+  it('has unique formulas and names, and every kind at every tier', () => {
     expect(new Set(COMPOUNDS.map((c) => c.id)).size).toBe(COMPOUNDS.length);
+    // Two compounds with the same typed name would make one of them unanswerable.
+    const typed = COMPOUNDS.flatMap((c) => c.names.map(normalize));
+    expect(new Set(typed).size).toBe(typed.length);
     for (const cat of CATEGORIES) for (const tier of [1, 2, 3] as const) expect(ofCategory(cat, tier).length).toBeGreaterThanOrEqual(6);
   });
 
@@ -123,17 +121,6 @@ describe('catalog', () => {
     }
   });
 
-  it('accepts every answer it lists', () => {
-    for (const c of COMPOUNDS) for (const a of c.answers) expect(grade(c, a).solved, c.formula).toBe(true);
-  });
-
-  it('only asks for pieces the keyboard has', () => {
-    for (const c of COMPOUNDS) {
-      const keys = new Set(keyboard(c.category).flatMap((g) => g.pieces.map((p) => `${p.slot}:${p.id}`)));
-      for (const a of c.answers) for (const [slot, id] of Object.entries(a)) expect(keys.has(`${slot}:${id}`), `${c.formula} ${slot}:${id}`).toBe(true);
-    }
-  });
-
   it('explains every compound', () => {
     for (const c of COMPOUNDS) {
       const lines = explain(c);
@@ -161,57 +148,37 @@ describe('formulas', () => {
   });
 });
 
-describe('grading', () => {
-  const fe = byId('Fe2(SO4)3');
-
-  it('marks close pieces of the same family', () => {
-    expect(verdict('sufixo', 'ito', 'ato')).toBe('close');
-    expect(verdict('sufixo', 'eto', 'ato')).toBe('wrong');
-    expect(verdict('prefixo', 'per', 'hipo')).toBe('close');
-    expect(verdict('prefixo', undefined, 'hipo')).toBe('wrong');
-    expect(verdict('valencia', 'II', 'III')).toBe('close');
-    expect(verdict('valencia', undefined, undefined)).toBe('right');
+describe('checking typed names', () => {
+  it('ignores accents, capitals, hyphens, spaces and how the numeral is written', () => {
+    const fe = byId('Fe2(SO4)3');
+    for (const typed of ['sulfato de ferro(III)', 'Sulfato de Ferro (III)', 'sulfato de ferro III', '  sulfato  de ferro(iii) ']) {
+      expect(check(fe, typed).kind, typed).toBe('right');
+    }
+    expect(check(byId('H2SO4'), 'acido sulfurico').kind).toBe('right');
+    expect(check(byId('NaH2PO4'), 'diidrogenofosfato de sódio').kind).toBe('right');
+    expect(check(byId('NaH2PO4'), 'dihidrogenofosfato de sodio').kind).toBe('right');
+    expect(check(byId('H3PO4'), 'ácido ortofosfórico').kind).toBe('right');
   });
 
-  it('grades a guess slot by slot', () => {
-    const g = grade(fe, { radical: 'sulf', sufixo: 'ito', cation: 'ferro', valencia: 'II' });
-    expect(g.solved).toBe(false);
-    expect(g.verdicts).toEqual({ prefixo: 'right', radical: 'right', sufixo: 'close', cation: 'right', valencia: 'close' });
+  it('marks the wrong suffix, numeral or element wrong', () => {
+    const fe = byId('Fe2(SO4)3');
+    expect(check(fe, 'sulfato de ferro(II)').kind).toBe('wrong');
+    expect(check(fe, 'sulfito de ferro(III)').kind).toBe('wrong');
+    expect(check(fe, 'sulfato de ferro').kind).toBe('wrong');
+    expect(check(byId('NaCl'), 'cloreto de sódio(I)').kind).toBe('wrong');
+    expect(check(byId('H2SO4'), 'sulfúrico').kind).toBe('wrong');
   });
 
-  it('accepts either prefix where both are right', () => {
-    expect(grade(byId('H3PO4'), { prefixo: 'orto', radical: 'fosf', sufixo: 'ico' }).solved).toBe(true);
-    expect(grade(byId('H3PO4'), { radical: 'fosf', sufixo: 'ico' }).solved).toBe(true);
-  });
-
-  it('refuses incomplete and repeated guesses', () => {
-    expect(problem('sal', { radical: 'sulf' }, [])).toBe('Falta o sufixo e o cátion');
-    const g: Guess = { radical: 'sulf', sufixo: 'ato', cation: 'ferro' };
-    expect(problem('sal', g, [])).toBeNull();
-    expect(problem('sal', { ...g }, [g])).toBe('Você já tentou esse nome');
-  });
-
-  it('colours the keyboard with the best verdict seen', () => {
-    const keys = keyStates(fe, [
-      { radical: 'sulf', sufixo: 'ito', cation: 'ferro', valencia: 'II' },
-      { radical: 'sulf', sufixo: 'ato', cation: 'cobre', valencia: 'II' },
-    ]);
-    expect(keys.get('sufixo:ito')).toBe('close');
-    expect(keys.get('sufixo:ato')).toBe('right');
-    expect(keys.get('cation:cobre')).toBe('wrong');
-    expect(keys.get('valencia:II')).toBe('close');
-  });
-
-  it('ends a round on a win or after the last try', () => {
-    const wrong: Guess = { radical: 'clor', sufixo: 'eto', cation: 'sodio' };
-    const tries = Array.from({ length: MAX_TRIES }, () => wrong);
-    expect(roundState(fe, tries).lost).toBe(true);
-    expect(roundState(fe, [wrong, fe.answers[0]]).won).toBe(true);
+  it('asks again for the IUPAC name when given another name of the compound', () => {
+    expect(check(byId('Fe2(SO4)3'), 'sulfato férrico')).toMatchObject({ kind: 'other', note: expect.stringContaining('tradicional') });
+    expect(check(byId('NaHCO3'), 'Bicarbonato de sodio')).toMatchObject({ kind: 'other' });
+    expect(check(byId('NaOH'), 'soda cáustica')).toMatchObject({ kind: 'other', note: expect.stringContaining('popular') });
+    expect(check(byId('NaOH'), '   ')).toEqual({ kind: 'empty' });
   });
 });
 
 describe('daily', () => {
-  it('numbers puzzles by the local calendar day from launch', () => {
+  it('numbers challenges by the local calendar day from launch', () => {
     expect(puzzleNumber(new Date(2026, 9, 23, 0, 1))).toBe(1);
     expect(puzzleNumber(new Date(2026, 9, 23, 23, 59))).toBe(1);
     expect(puzzleNumber(new Date(2026, 9, 24, 0, 0))).toBe(2);
@@ -221,30 +188,30 @@ describe('daily', () => {
     expect(msToNext(new Date(2026, 9, 23, 23, 59, 0))).toBe(60_000);
   });
 
-  it('ramps the week from easy to hard', () => {
-    // 23 Oct 2026 is a Friday.
-    expect([1, 2, 3, 4, 5, 6, 7].map(tierOf)).toEqual([2, 3, 3, 1, 1, 2, 2]);
-  });
-
-  it('gives everyone the same acid, base and salt, at the day’s tier', () => {
-    expect(daily(10)).toEqual(daily(10));
-    for (let n = 1; n <= 60; n++) for (const cat of CATEGORIES) {
-      expect(daily(n)[cat].category).toBe(cat);
-      expect(daily(n)[cat].tier).toBe(tierOf(n));
+  it('gives everyone the same two acids, two bases and two salts, easier first', () => {
+    expect(daily(10).map((c) => c.id)).toEqual(daily(10).map((c) => c.id));
+    for (let n = 1; n <= 60; n++) {
+      const day = daily(n);
+      expect(day.map((c) => c.category)).toEqual(['acido', 'acido', 'base', 'base', 'sal', 'sal']);
+      expect(new Set(day.map((c) => c.id)).size).toBe(DAILY_SIZE);
+      for (let i = 0; i < DAILY_SIZE; i += 2) expect(day[i].tier).toBeLessThanOrEqual(day[i + 1].tier);
     }
   });
 
-  it('does not repeat a compound until its pool runs out', () => {
+  it('does not repeat a compound until its pool runs out, nor on the next day', () => {
     for (const cat of CATEGORIES) {
+      const size = ofCategory(cat).length;
       const seen: string[] = [];
-      for (let n = 1; n <= 400; n++) if (tierOf(n) === 1) seen.push(daily(n)[cat].id);
-      const size = ofCategory(cat, 1).length;
+      for (let n = 1; seen.length < size; n++) seen.push(...daily(n).filter((c) => c.category === cat).map((c) => c.id));
       expect(new Set(seen.slice(0, size)).size).toBe(size);
-      for (let i = 1; i < seen.length; i++) expect(seen[i]).not.toBe(seen[i - 1]);
+    }
+    for (let n = 1; n < 400; n++) {
+      const today = new Set(daily(n).map((c) => c.id));
+      expect(daily(n + 1).filter((c) => today.has(c.id)), `day ${n}`).toEqual([]);
     }
   });
 
-  it('picks practice compounds by category and tier, avoiding recent ones', () => {
+  it('picks practice compounds by kind and tier, avoiding recent ones', () => {
     const c = practicePick(7, 'sal', 2);
     expect(c.category).toBe('sal');
     expect(c.tier).toBe(2);
@@ -254,47 +221,30 @@ describe('daily', () => {
 });
 
 describe('play', () => {
-  const winning = (n: number, tries = 1) => {
-    const day = daily(n);
-    return Object.fromEntries(
-      CATEGORIES.map((cat) => {
-        const c = day[cat];
-        const wrong: Guess = Object.fromEntries(SLOTS[cat].filter((s) => s !== 'prefixo' && s !== 'valencia').map((s) => [s, s === 'sufixo' ? (cat === 'acido' ? 'idrico' : 'eto') : s === 'cation' ? 'ouro' : 'cian'])) as Guess;
-        const misses = Array.from({ length: tries - 1 }, () => wrong);
-        return [cat, { id: c.id, guesses: [...misses, c.answers[0]] }];
-      }),
-    );
-  };
+  const played = (n: number, wrong = 0): DayPlay =>
+    daily(n).map((c, i) => ({ id: c.id, typed: i < wrong ? 'não sei' : c.name, correct: i >= wrong }));
 
   it('counts streaks of complete days', () => {
-    const days: Days = { 3: winning(3), 4: winning(4, 2), 5: winning(5), 8: winning(8), 9: winning(9) };
+    const days: Days = { 3: played(3), 4: played(4, 2), 5: played(5), 8: played(8), 9: played(9) };
     const s = stats(days, 10);
     expect(s.streak).toBe(2);
     expect(s.best).toBe(3);
     expect(s.played).toBe(5);
-    expect(s.wins).toBe(15);
-    expect(s.tries[0]).toBe(12);
-    expect(s.byCategory.sal).toEqual({ rounds: 5, wins: 5 });
+    expect(s.answered).toBe(30);
+    expect(s.correct).toBe(28);
+    expect(s.byCategory.acido).toEqual({ answered: 10, correct: 8 });
     // Today still open: yesterday's streak stands; finishing today extends it.
-    expect(stats({ ...days, 10: { acido: winning(10).acido } }, 10).streak).toBe(2);
-    expect(stats({ ...days, 10: winning(10) }, 10).streak).toBe(3);
+    expect(stats({ ...days, 10: played(10).slice(0, 3) }, 10).streak).toBe(2);
+    expect(stats({ ...days, 10: played(10) }, 10).streak).toBe(3);
     expect(stats(days, 11).streak).toBe(0);
   });
 
-  it('shares squares, never the answers', () => {
-    const text = shareText(4, winning(4, 2), 3);
-    const lines = text.split('\n');
-    expect(lines[0]).toBe('CheMrster #4 · 3/3 · 🔥3');
-    expect(lines[1]).toMatch(/^🍋 2\/6 [⬛🟨🟩]+ 🟩+$/u);
-    expect(text).not.toContain(daily(4).sal.name);
-    expect(shareText(4, undefined, 0).split('\n')[3]).toBe('🧂 –/6');
-    expect(shareText(4, winning(4), 0, 'contrast')).toContain('🟧');
-  });
-
-  it('keeps the compound a round was played with', () => {
-    const rounds = roundsOf(5, { base: { id: 'KOH', guesses: [] } });
-    expect(rounds.base.compound.id).toBe('KOH');
-    expect(rounds.acido.compound.id).toBe(daily(5).acido.id);
+  it('keeps the compound an answer was given for', () => {
+    const questions = questionsOf(5, [{ id: 'HF', typed: 'ácido fluorídrico', correct: true }]);
+    expect(questions[0].compound.id).toBe('HF');
+    expect(questions[0].answer?.correct).toBe(true);
+    expect(questions[1].compound.id).toBe(daily(5)[1].id);
+    expect(questions[1].answer).toBeUndefined();
   });
 });
 
@@ -303,17 +253,33 @@ describe('store', () => {
     expect(revive(null)).toEqual({ days: {}, helpSeen: false });
     const s = revive({
       helpSeen: true,
-      days: { 3: { acido: { id: 'HCl', guesses: [{ radical: 'clor', sufixo: 'idrico', junk: 1 }, 'x'] }, base: 'oops' }, x: {} },
+      days: {
+        3: [{ id: 'HCl', typed: 'ácido clorídrico', correct: true, junk: 1 }, 'x', { id: 'HF', typed: 'a', correct: false }],
+        4: 'oops',
+        x: [],
+      },
     });
-    expect(s).toEqual({ helpSeen: true, days: { 3: { acido: { id: 'HCl', guesses: [{ radical: 'clor', sufixo: 'idrico' }] } } } });
+    expect(s).toEqual({ helpSeen: true, days: { 3: [{ id: 'HCl', typed: 'ácido clorídrico', correct: true }] } });
   });
 
-  it('plays guesses until the round ends', () => {
+  it('keeps right and wrong answers, in order, once each', () => {
     saveStore.set({ days: {}, helpSeen: false });
-    const c = daily(2).sal;
-    expect(playGuess(2, c, { radical: 'sulf' })).toMatch(/^Falta/);
-    expect(playGuess(2, c, c.answers[0])).toBeNull();
-    expect(playGuess(2, c, { radical: 'clor', sufixo: 'eto', cation: 'sodio' })).toBe('Essa rodada já terminou');
-    expect(saveStore.get().days[2].sal).toEqual({ id: c.id, guesses: [c.answers[0]] });
+    const [first, second] = daily(2);
+    expect(answerDaily(2, 0, first, '')).toEqual({ kind: 'empty' });
+    expect(answerDaily(2, 1, second, second.name)).toEqual({ kind: 'empty' });
+    expect(answerDaily(2, 0, first, first.name)).toEqual({ kind: 'right' });
+    expect(answerDaily(2, 0, first, 'outra coisa')).toEqual({ kind: 'empty' });
+    expect(answerDaily(2, 1, second, 'ácido qualquer')).toEqual({ kind: 'wrong' });
+    expect(saveStore.get().days[2]).toEqual([
+      { id: first.id, typed: first.name, correct: true },
+      { id: second.id, typed: 'ácido qualquer', correct: false },
+    ]);
+  });
+
+  it('does not spend an answer on another name of the compound', () => {
+    saveStore.set({ days: {}, helpSeen: false });
+    const base = byId('Fe(OH)3');
+    expect(answerDaily(7, 0, base, 'hidróxido férrico').kind).toBe('other');
+    expect(saveStore.get().days[7]).toBeUndefined();
   });
 });
