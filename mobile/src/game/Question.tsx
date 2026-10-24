@@ -1,17 +1,19 @@
 /**
- * One compound to name: its formula on paper and a text field for the IUPAC name, typed on the
- * device's keyboard. Once answered, the result and why. The daily challenge and practice share
- * it; they differ only in where answers are kept (`answer` and `onSubmit`).
+ * One compound to name: its formula (or, for an organic compound, its structure) on paper and a
+ * text field for the IUPAC name, typed on the device's keyboard. Once answered, the result and
+ * why. The daily challenge and practice share it; they differ only in where answers are kept
+ * (`answer` and `onSubmit`).
  */
-import { type ReactNode, useState } from 'react';
+import { type ReactNode, useMemo, useState } from 'react';
 import { Keyboard, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TextInput, View, useWindowDimensions } from 'react-native';
 import { type Compound, TIER_LABEL } from '../../../src/nomenclatura/catalog.ts';
 import type { Check } from '../../../src/nomenclatura/check.ts';
 import { haptic } from '../lib/haptics.ts';
 import { COLUMN, FONT, GUTTER, LIGHT, paperShadow, useTheme } from '../theme.ts';
-import { Btn, Txt } from '../ui/kit.tsx';
+import { Btn, Press, Txt } from '../ui/kit.tsx';
 import { Formula } from './Formula.tsx';
 import { Result } from './Result.tsx';
+import { Structure, type StructureKind, defaultKind } from './Structure.tsx';
 
 function Dots({ tier }: { tier: 1 | 2 | 3 }) {
   return (
@@ -43,9 +45,16 @@ export function Question({
   children?: ReactNode;
 }) {
   const c = useTheme();
-  const short = useWindowDimensions().height < 700;
+  const window = useWindowDimensions();
+  const short = window.height < 700;
   const [text, setText] = useState('');
   const [note, setNote] = useState<string | null>(null);
+  // The paper's inside width.
+  const room = Math.min(window.width, COLUMN) - GUTTER * 2 - 28;
+  const smiles = compound.smiles;
+  const fitted = useMemo(() => (smiles ? defaultKind(smiles, room) : 'condensed'), [smiles, room]);
+  const [picked, setPicked] = useState<StructureKind>();
+  const kind = picked ?? fitted;
 
   const submit = () => {
     const result = onSubmit(text);
@@ -69,7 +78,31 @@ export function Question({
             </Txt>
             <Dots tier={compound.tier} />
           </View>
-          <Formula formula={compound.formula} size={short ? 36 : 46} color={c.ink} style={{ minHeight: short ? 46 : 58 }} />
+          {smiles ? (
+            <>
+              <Structure
+                smiles={smiles}
+                kind={kind}
+                size={short ? 34 : 40}
+                maxWidth={room}
+                maxHeight={short ? 150 : 210}
+                color={c.ink}
+                title={`Fórmula estrutural, ${compound.formula}`}
+              />
+              <Press
+                sink={1}
+                onPress={() => setPicked(kind === 'condensed' ? 'skeletal' : 'condensed')}
+                accessibilityRole="button"
+                style={styles.kind}
+              >
+                <Txt variant="small" style={{ color: LIGHT.magenta }}>
+                  {kind === 'condensed' ? 'Ver em bastão' : 'Ver condensada'}
+                </Txt>
+              </Press>
+            </>
+          ) : (
+            <Formula formula={compound.formula} size={short ? 36 : 46} color={c.ink} style={{ minHeight: short ? 46 : 58 }} />
+          )}
         </View>
 
         {answer ? (
@@ -105,7 +138,9 @@ export function Question({
             )}
             <Btn kind="primary" wide label="Responder" disabled={!text.trim()} onPress={submit} />
             <Txt variant="small" tone="muted">
-              Acentos, maiúsculas e hífens não importam. A carga vai em romano: ferro(III), ferro (III) ou ferro III.
+              {smiles
+                ? 'Acentos, maiúsculas, hífens e espaços não importam. Vale o estilo atual ou o antigo: propan-\u20602-\u2060ol ou 2-\u2060propanol.'
+                : 'Acentos, maiúsculas e hífens não importam. A carga vai em romano: ferro(III), ferro (III) ou ferro III.'}
             </Txt>
           </View>
         )}
@@ -121,6 +156,7 @@ const styles = StyleSheet.create({
   paperHead: { flexDirection: 'row', alignSelf: 'stretch', justifyContent: 'space-between', alignItems: 'center' },
   dots: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   dot: { width: 7, height: 7, borderRadius: 4 },
+  kind: { alignSelf: 'flex-end', paddingVertical: 4, paddingHorizontal: 6, minHeight: 32, justifyContent: 'center' },
   form: { gap: 10 },
   input: { minHeight: 54, borderWidth: 2, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, fontFamily: FONT.ui, fontSize: 18 },
   note: { borderRadius: 10, padding: 10 },

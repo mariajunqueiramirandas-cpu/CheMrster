@@ -2,7 +2,7 @@
 import { persisted, usePersisted } from '../app/persist.ts';
 import type { Compound } from './catalog.ts';
 import { type Check, check } from './check.ts';
-import { DAILY_SIZE } from './daily.ts';
+import { DAILY_SIZE, dailySize } from './daily.ts';
 import type { Answer, DayPlay, Days } from './play.ts';
 
 export interface Save {
@@ -49,7 +49,7 @@ export const useSave = () => usePersisted(saveStore);
 export function answerDaily(n: number, index: number, compound: Compound, typed: string): Check {
   const day = saveStore.get().days[n] ?? [];
   // Already answered, or out of order: nothing to record.
-  if (index !== day.length || index >= DAILY_SIZE) return { kind: 'empty' };
+  if (index !== day.length || index >= dailySize(n)) return { kind: 'empty' };
   const result = check(compound, typed);
   if (result.kind === 'right' || result.kind === 'wrong') {
     const answer: Answer = { id: compound.id, typed: typed.trim(), correct: result.kind === 'right' };

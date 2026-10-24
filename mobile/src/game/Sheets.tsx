@@ -28,11 +28,11 @@ function Help() {
       <Txt variant="title" accessibilityRole="header">
         Como funciona
       </Txt>
-      <Rich text={`Todo dia, um desafio novo com **${DAILY_SIZE} compostos**: dois **ácidos**, duas **bases** e dois **sais**, os mesmos para todo mundo.`} />
-      <Rich text="Veja a fórmula e **escreva o nome IUPAC** no teclado. Uma resposta por composto." />
-      <Rich text="Acentos, maiúsculas e hífens não importam. A carga do metal vai em **romano**: ferro(III), ferro (III) ou ferro III." />
-      <Rich text="Escreveu o nome tradicional ou o popular (sulfato férrico, soda cáustica)? O app avisa e você tenta de novo com o IUPAC." />
-      <Rich text="Depois de cada resposta, o **porquê** do nome: o Nox, as cargas e a regra." />
+      <Rich text={`Todo dia, um desafio novo com **${DAILY_SIZE} compostos**: dois **ácidos**, duas **bases**, dois **sais** e dois **orgânicos**, os mesmos para todo mundo.`} />
+      <Rich text="Veja a fórmula (ou a estrutura, nos orgânicos) e **escreva o nome IUPAC** no teclado. Uma resposta por composto." />
+      <Rich text={'Acentos, maiúsculas e hífens não importam. A carga do metal vai em **romano**: ferro(III), ferro (III) ou ferro III. Nos orgânicos, vale o estilo atual ou o antigo: propan-\u20602-\u2060ol ou 2-\u2060propanol.'} />
+      <Rich text="Escreveu o nome tradicional ou o usual (sulfato férrico, soda cáustica, acetona)? O app avisa e você tenta de novo com o IUPAC." />
+      <Rich text="Depois de cada resposta, o **porquê** do nome: o Nox, as cargas, a cadeia e a regra." />
       <Rich text="Termine o desafio todo dia para manter a **sequência**. Um novo sai à meia-noite. No **Treino** você pratica quanto quiser; no **Guia** estão as regras e a tabela de íons." />
     </>
   );
@@ -71,7 +71,7 @@ function Statistics() {
         const b = s.byCategory[cat];
         return (
           <View key={cat} style={styles.catRow}>
-            <Txt style={{ width: 70 }}>{CATEGORY_PLURAL[cat]}</Txt>
+            <Txt style={{ width: 88 }}>{CATEGORY_PLURAL[cat]}</Txt>
             <Meter value={b.answered ? b.correct / b.answered : 0} style={{ flex: 1 }} />
             <Txt variant="small" tone="muted" style={{ width: 64, textAlign: 'right' }}>
               {b.correct}/{b.answered}

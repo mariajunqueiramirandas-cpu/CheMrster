@@ -1,6 +1,7 @@
 /**
- * The daily challenge: two acids, two bases and two salts, the same for everyone on a calendar
- * day, a new set at local midnight. Challenge #1 is 23 October 2026.
+ * The daily challenge: two acids, two bases, two salts and two organic compounds, the same for
+ * everyone on a calendar day, a new set at local midnight. Challenge #1 is 23 October 2026; the
+ * organic compounds join from challenge #3, so the days before keep the six they were played with.
  */
 import { createRng } from '../course/random.ts';
 import { type Compound, type Tier, ofCategory } from './catalog.ts';
@@ -11,7 +12,17 @@ const DAY = 86_400_000;
 
 /** Compounds of each kind in a day's challenge. */
 export const PER_CATEGORY = 2;
+/** The most compounds a day has. */
 export const DAILY_SIZE = PER_CATEGORY * CATEGORIES.length;
+
+/** The first challenge with each kind. */
+const SINCE: Record<Category, number> = { acido: 1, base: 1, sal: 1, organico: 3 };
+
+/** The kinds in challenge `n`, in the order they are asked. */
+export const categoriesOf = (n: number) => CATEGORIES.filter((cat) => n >= SINCE[cat]);
+
+/** How many compounds challenge `n` has. */
+export const dailySize = (n: number) => PER_CATEGORY * categoriesOf(n).length;
 
 /** Days since launch of a local calendar date, so DST and time zones never skip or repeat a challenge. */
 const dayIndex = (d: Date) => Math.round((Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) - LAUNCH) / DAY);
@@ -64,11 +75,11 @@ function cycleOrder(pool: readonly Compound[], key: string, cycle: number): Comp
 
 const nth = (pool: readonly Compound[], key: string, k: number) => cycleOrder(pool, key, Math.floor(k / pool.length))[k % pool.length];
 
-/** Challenge `n`: the acids, then the bases, then the salts, the easier of each kind first. */
+/** Challenge `n`: the acids, the bases, the salts, then the organic compounds, the easier of each kind first. */
 export function daily(n: number): Compound[] {
-  return CATEGORIES.flatMap((cat) => {
+  return categoriesOf(n).flatMap((cat) => {
     const pool = ofCategory(cat);
-    const picks = Array.from({ length: PER_CATEGORY }, (_, i) => nth(pool, cat, (n - 1) * PER_CATEGORY + i));
+    const picks = Array.from({ length: PER_CATEGORY }, (_, i) => nth(pool, cat, (n - SINCE[cat]) * PER_CATEGORY + i));
     return picks.sort((a, b) => a.tier - b.tier);
   });
 }

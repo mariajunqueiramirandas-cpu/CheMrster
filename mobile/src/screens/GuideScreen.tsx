@@ -1,11 +1,13 @@
 /**
- * The guide: how acids, bases and salts are named, and the ions behind every name in the game.
- * The tables come from the game's own pieces, so they always match what the board accepts.
+ * The guide: how acids, bases, salts and organic compounds are named, and the ions behind every
+ * name in the game. The tables come from the game's own pieces, so they always match what the
+ * board accepts.
  */
 import type { ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { ANIONS, parentAcid } from '../../../src/nomenclatura/catalog.ts';
 import { ionText } from '../../../src/nomenclatura/formula.ts';
+import { GROUPS, type GroupId, STEMS } from '../../../src/nomenclatura/organic.ts';
 import { CATIONS, ROMAN } from '../../../src/nomenclatura/pieces.ts';
 import { FONT, useTheme } from '../theme.ts';
 import { Card, Rich, Txt, keepSuffixes } from '../ui/kit.tsx';
@@ -111,6 +113,59 @@ export function GuideScreen() {
             hidrogenocarbonato de sódio
           </Row>
           <Row formula="NaH₂PO₄">di-hidrogenofosfato de sódio</Row>
+        </Section>
+
+        <Section title="Orgânicos" emoji="🌿">
+          <Rich text="**prefixos + cadeia + ligações + sufixo.** A cadeia principal é a maior sequência de carbonos que tem o grupo funcional e as ligações duplas e triplas." />
+          {[0, 2, 4, 6, 8].map((i) => (
+            <Row key={i} formula={`${i + 1} C · ${i + 2} C`}>
+              **{STEMS[i + 1]}** · **{STEMS[i + 2]}**
+            </Row>
+          ))}
+          <Rich text="Entre os carbonos:" />
+          <Row formula="C–C">só simples: **an** (propano)</Row>
+          <Row formula="C=C">uma dupla: **en** (propeno)</Row>
+          <Row formula="C≡C">uma tripla: **in** (propino)</Row>
+          <Row formula="2 C=C">duas duplas: **dien** (buta-1,3-dieno)</Row>
+          <Rich text="O grupo funcional dá o sufixo:" />
+          <Row formula="–OH" dim="álcool">
+            etan**ol**
+          </Row>
+          <Row formula="–CHO" dim="aldeído">
+            etan**al**
+          </Row>
+          <Row formula="C–CO–C" dim="cetona">
+            propan**ona**
+          </Row>
+          <Row formula="–COOH" dim="ácido carboxílico">
+            **ácido** etan**oico**
+          </Row>
+          <Row formula="–COO–" dim="éster: o lado do C=O, de, o lado do O">
+            etan**oato de** et**ila**
+          </Row>
+          <Row formula="–NH₂" dim="amina">
+            metan**amina**
+          </Row>
+          <Row formula="–CONH₂" dim="amida">
+            etan**amida**
+          </Row>
+          <Row formula="–C≡N" dim="nitrila">
+            etano**nitrila**
+          </Row>
+          <Row formula="–O–" dim="éter: o lado menor + oxi, o maior">
+            **metoxi**etano
+          </Row>
+          <Row formula="–Cl" dim="haleto: o halogênio é prefixo">
+            **cloro**metano
+          </Row>
+          <Rich text="**Numere** pela ponta mais perto do grupo funcional; sem ele, da dupla ou tripla; sem elas, das ramificações. Cada número vem antes da parte que localiza: **propan-2-ol**, **but-2-eno**, **2-metilbutano**." />
+          <Rich text="Ramificações viram **prefixos**, em ordem alfabética; **di-, tri-** contam os grupos iguais: **2,2-dimetilpropano**, **3-etil-2-metil-hexano**." />
+          {(['metil', 'etil', 'propil', 'isopropil', 'fenil', 'etenil', 'metoxi'] as GroupId[]).map((g) => (
+            <Row key={g} formula={GROUPS[g].formula}>
+              **{g}**
+            </Row>
+          ))}
+          <Rich text="Quando só existe uma posição possível, o número sai: **propanona**, **metilpropano**. No estilo antigo, ainda comum, os números vêm na frente: **2-propanol**, **1,3-butadieno**. O jogo aceita os dois." />
         </Section>
 
         <Section title="Ânions do jogo">

@@ -5,12 +5,12 @@
  * parts, so the spelling rules live in one place.
  */
 
-export type Category = 'acido' | 'base' | 'sal';
+export type Category = 'acido' | 'base' | 'sal' | 'organico';
 
-export const CATEGORIES: readonly Category[] = ['acido', 'base', 'sal'];
+export const CATEGORIES: readonly Category[] = ['acido', 'base', 'sal', 'organico'];
 
-export const CATEGORY_LABEL: Record<Category, string> = { acido: 'Ácido', base: 'Base', sal: 'Sal' };
-export const CATEGORY_PLURAL: Record<Category, string> = { acido: 'Ácidos', base: 'Bases', sal: 'Sais' };
+export const CATEGORY_LABEL: Record<Category, string> = { acido: 'Ácido', base: 'Base', sal: 'Sal', organico: 'Orgânico' };
+export const CATEGORY_PLURAL: Record<Category, string> = { acido: 'Ácidos', base: 'Bases', sal: 'Sais', organico: 'Orgânicos' };
 
 export type SuffixId = 'idrico' | 'ico' | 'oso' | 'eto' | 'ato' | 'ito';
 
@@ -137,8 +137,8 @@ const cationText = (p: Parts) => {
 
 const anionText = (p: Parts) => word(p.prefixo, p.radical!, p.sufixo!);
 
-/** The name the parts spell: "ácido hipocloroso", "hidróxido de ferro(III)", "hidrogenocarbonato de sódio". */
-export function compose(category: Category, p: Parts): string {
+/** The name the parts spell: "ácido hipocloroso", "hidróxido de ferro(III)", "hidrogenocarbonato de sódio". Organic names are written by organic.ts. */
+export function compose(category: Exclude<Category, 'organico'>, p: Parts): string {
   switch (category) {
     case 'acido':
       return `ácido ${anionText(p)}`;
