@@ -47,7 +47,7 @@
       ]
     ],
     "scheme": "chemrster",
-    "description": "Nomenclatura do dia: o desafio diário de nomes IUPAC de ácidos, bases e sais para o ENEM.",
+    "description": "Nomenclatura do dia: o desafio diário de nomes IUPAC de ácidos, bases, sais e compostos orgânicos para o ENEM.",
     "backgroundColor": "#E8ECEF",
     "experiments": {
       "typedRoutes": false,

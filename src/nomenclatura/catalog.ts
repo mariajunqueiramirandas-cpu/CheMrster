@@ -1,13 +1,17 @@
 /**
- * Every compound the game asks about: the acids, bases and salts of ENEM chemistry, each with
+ * Every compound the game asks about: the acids, bases, salts and organic compounds of ENEM chemistry, each with
  * its formula, the parts of its IUPAC name, how hard it is, its other names, and (for many)
  * where it shows up. Formulas of bases and salts are built from their ions, so a formula and its
  * name cannot drift.
  */
 import { type IonSpec, compound as neutral, counts } from './formula.ts';
+import { type OrgDef, ORGANIC_DEFS, molecularFormula, spellings } from './organic.ts';
 import { type Cation, type Category, type Parts, type Radical, type SuffixId, ROMAN, cationOf, compose, radicalOf, word } from './pieces.ts';
 
-/** 1: the classics; 2: Roman numerals, hipo-/per-, hydrogen salts; 3: the rest of the textbook. */
+/**
+ * 1: the classics; 2: Roman numerals, hipo-/per-, hydrogen salts, locants and branches;
+ * 3: the rest of the textbook.
+ */
 export type Tier = 1 | 2 | 3;
 
 export const TIER_LABEL: Record<Tier, string> = { 1: 'Fácil', 2: 'Médio', 3: 'Difícil' };
@@ -28,12 +32,13 @@ export interface Anion {
 }
 
 export interface Compound {
-  /** The formula, which is unique. */
+  /** The formula (the SMILES for organic compounds), which is unique. */
   id: string;
   category: Category;
+  /** As written on the card; for organic compounds, the molecular formula (the card draws the structure). */
   formula: string;
   tier: Tier;
-  /** The parts of each accepted IUPAC name; the first is the name the game shows. */
+  /** The parts of each accepted inorganic IUPAC name; the first is the name the game shows. */
   answers: readonly Parts[];
   /** The accepted IUPAC names, written out: "ácido fosfórico", "ácido ortofosfórico". */
   names: readonly string[];
@@ -49,6 +54,9 @@ export interface Compound {
   cation?: { piece: Cation; charge: number };
   /** Salts. */
   anion?: Anion;
+  /** Organic compounds: the structure and how the name is built. */
+  smiles?: string;
+  organic?: OrgDef;
 }
 
 type AnionDef = [formula: string, charge: number, prefixo: string | undefined, radical: string, sufixo: Anion['sufixo'], extra?: Pick<Anion, 'alsoPrefix' | 'common'>];
@@ -406,7 +414,30 @@ function salt([id, charge, anionName, tier, extra]: SaltDef): Compound {
   };
 }
 
-export const COMPOUNDS: readonly Compound[] = [...ACID_DEFS.map(acid), ...BASE_DEFS.map(base), ...SALT_DEFS.map(salt)];
+function organic(def: OrgDef): Compound {
+  const names = [...(def.parts ? spellings(def.parts) : (def.kept ?? [])), ...(def.also ?? [])];
+  return {
+    id: def.smiles,
+    category: 'organico',
+    formula: molecularFormula(def.smiles),
+    tier: def.tier,
+    answers: [],
+    names,
+    name: names[0],
+    traditional: [],
+    common: def.common ?? [],
+    fact: def.fact,
+    smiles: def.smiles,
+    organic: def,
+  };
+}
+
+export const COMPOUNDS: readonly Compound[] = [
+  ...ACID_DEFS.map(acid),
+  ...BASE_DEFS.map(base),
+  ...SALT_DEFS.map(salt),
+  ...ORGANIC_DEFS.map(organic),
+];
 
 const BY_ID = new Map(COMPOUNDS.map((c) => [c.id, c]));
 

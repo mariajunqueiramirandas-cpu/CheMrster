@@ -1,5 +1,5 @@
 This is CheMrster's *Nomenclatura do dia*: a daily challenge where you type the IUPAC names of
-acids, bases and salts, for Android and the web, an Expo/React Native application.
+acids, bases, salts and organic compounds, for Android and the web, an Expo/React Native application.
 Prioritize mobile-first patterns, performance, and cross-platform compatibility.
 
 ## Shared code

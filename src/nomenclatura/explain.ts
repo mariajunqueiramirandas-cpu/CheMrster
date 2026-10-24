@@ -1,10 +1,12 @@
 /**
  * Why a compound has its name, in the steps a teacher would write on the board: what kind of
- * compound it is, the charge or oxidation number that picks the suffix or numeral, and the
- * rule that turns them into the name. Lines use **bold** for the key terms.
+ * compound it is, the charge or oxidation number that picks the suffix or numeral (or, for an
+ * organic compound, the chain, its bonds and the function), and the rule that turns them into the
+ * name. Lines use **bold** for the key terms.
  */
 import { type Compound, parentAcid, radicalFor } from './catalog.ts';
 import { balance, counts, ionText, pretty } from './formula.ts';
+import { GROUPS, type OrgFunction, type OrgParts, STEMS, numberable, prefixText, render } from './organic.ts';
 import { ROMAN } from './pieces.ts';
 
 interface Step {
@@ -154,9 +156,99 @@ function saltSteps(c: Compound): string[] {
   return lines;
 }
 
+/** What the function is, and what it puts in the name. */
+const FUNCTION_STEP: Record<OrgFunction, string> = {
+  hidrocarboneto: 'Só carbono e hidrogênio: é um **hidrocarboneto** → o nome termina em **-o**.',
+  alcool: 'OH ligado a carbono saturado: é um **álcool** → sufixo **-ol**.',
+  fenol: 'OH ligado direto ao anel aromático: é um **fenol**.',
+  aldeido: 'Carbonila na ponta da cadeia (–CHO): é um **aldeído** → sufixo **-al**.',
+  cetona: 'Carbonila entre dois carbonos (C–CO–C): é uma **cetona** → sufixo **-ona**.',
+  acido: 'Carboxila (–COOH): é um **ácido carboxílico** → **ácido** + cadeia + **-oico**.',
+  ester: 'Grupo –COO– entre dois carbonos: é um **éster** → lado do C=O com **-oato**, **de**, e o grupo ligado ao O com **-ila**.',
+  eter: 'Oxigênio entre dois carbonos: é um **éter** → o lado menor vira o prefixo **-oxi** do lado maior.',
+  amina: 'Nitrogênio ligado a carbono, como na amônia: é uma **amina** → sufixo **-amina**.',
+  amida: 'Carbonila ligada ao nitrogênio (–CONH₂): é uma **amida** → sufixo **-amida**.',
+  haleto: 'Halogênio ligado ao carbono: é um **haleto orgânico** → o halogênio entra como prefixo (fluoro, cloro, bromo, iodo).',
+  nitrila: 'Grupo –C≡N: é uma **nitrila** → sufixo **-nitrila**, e o C do CN conta na cadeia.',
+  nitro: 'Grupo –NO₂ preso ao carbono: é um **nitrocomposto** → prefixo **nitro**.',
+};
+
+const COUNT = ['', 'Uma', 'Duas', 'Três', 'Quatro'];
+
+/** "Uma ligação dupla → **-en-**, no carbono **2**." */
+function bondStep(kind: 'dupla' | 'tripla', at: readonly number[], shown: boolean): string {
+  const infix = `${['', '', 'di', 'tri'][at.length]}${kind === 'dupla' ? 'en' : 'in'}`;
+  const plural = at.length > 1 ? `ligações ${kind}s` : `ligação ${kind}`;
+  const where = shown ? `, ${at.length > 1 ? 'começando nos carbonos' : 'no carbono'} **${at.join(' e ')}**` : '';
+  return `${COUNT[at.length]} ${plural} → **-${infix}-**${where}.`;
+}
+
+/** The chain and its prefix: "Cadeia principal: **3** carbonos → **prop**." */
+function chainStep(fn: OrgFunction, p: OrgParts): string {
+  if (p.parent === 'benzeno') return 'O anel aromático de seis carbonos é o **benzeno**, que dá o nome principal.';
+  const n = p.parent;
+  const carbons = `**${n}** ${n === 1 ? 'carbono' : 'carbonos'} → **${STEMS[n]}**`;
+  if (p.ring) return `Cadeia fechada (anel) com ${carbons}, com **ciclo-** na frente.`;
+  if (fn === 'ester') return `Lado do ácido (com o C=O): ${carbons}.`;
+  if (fn === 'eter') return `Lado maior, a cadeia principal: ${carbons}.`;
+  const what = fn === 'aldeido' || fn === 'acido' || fn === 'amida' || fn === 'nitrila' ? ', contando o carbono do grupo funcional' : '';
+  return `Cadeia principal: ${carbons}${what}.`;
+}
+
+function organicSteps(c: Compound): string[] {
+  const def = c.organic!;
+  const lines = [FUNCTION_STEP[def.fn]];
+  const p = def.parts;
+  if (!p) {
+    lines.push(def.note ?? `**${c.name}** é um nome que a IUPAC mantém, consagrado pelo uso.`);
+    lines.push(`→ **${c.name}**.`);
+    const others = c.names.slice(1).map((name) => `**${name}**`);
+    if (others.length) lines.push(`Também vale: ${others.join(', ')}.`);
+    return lines;
+  }
+  lines.push(chainStep(def.fn, p));
+  const shown = !p.bare;
+  if (p.parent !== 'benzeno') {
+    if (p.en?.length) lines.push(bondStep('dupla', p.en, shown));
+    if (p.in?.length) lines.push(bondStep('tripla', p.in, shown));
+    if (!p.en?.length && !p.in?.length && p.parent > 1) lines.push('Só ligações simples entre carbonos → **-an-**.');
+  }
+  const numbered = /\d/.test(c.name);
+  const located = p.suffix === 'ol' || p.suffix === 'ona' || p.suffix === 'amina';
+  const first = p.suffix === 'al' || p.suffix === 'oico' || p.suffix === 'amida' || p.suffix === 'nitrila';
+  if (numbered && first) {
+    lines.push('O carbono do grupo funcional é sempre o **1**: numere a partir dele.');
+  } else if (numbered && p.parent !== 'benzeno') {
+    const near = located ? 'do grupo funcional' : p.en?.length || p.in?.length ? 'da insaturação' : 'das ramificações';
+    lines.push(`Numere a cadeia pela ponta mais perto ${near}; cada número vem antes da parte que localiza.`);
+  } else if (numbered) {
+    lines.push('No anel, numere os grupos com os menores números possíveis.');
+  }
+  if (p.subs?.length) {
+    const groups = [...new Set(p.subs.map((s) => s.group))]
+      .sort((a, b) => a.localeCompare(b, 'pt'))
+      .map((g) => `${g} (${GROUPS[g].formula})`)
+      .join(', ');
+    const several = p.subs.length > 1 ? ', em ordem alfabética' : '';
+    const counted = p.subs.some((s) => s.at.length > 1) ? '; di-, tri- e tetra- contam os grupos iguais' : '';
+    lines.push(`Prefixos: ${groups}${several}${counted} → **${prefixText(p.subs, shown)}**.`);
+    if (p.subs.some((s) => s.at.includes('N'))) lines.push('**N-** diz que o grupo está no nitrogênio, não num carbono.');
+  }
+  if (p.alkyl) lines.push(`O grupo ligado ao O, ${GROUPS[p.alkyl].formula}, vira **${p.alkyl}a**.`);
+  lines.push(`→ **${c.name}**.`);
+  // Locants left out because they cannot vary, and the older style.
+  const full = render(p, true, false);
+  if (numberable(p) && full !== c.name) lines.push(`Não há outra posição possível, então os números podem ficar de fora (**${full}** também vale).`);
+  const old = render(p, shown, true);
+  if (old !== c.name) lines.push(`No estilo antigo, ainda comum, os números vão na frente: **${old}**. Também vale.`);
+  if (def.also?.length) lines.push(`Também vale: ${def.also.map((n) => `**${n}**`).join(', ')}.`);
+  return lines;
+}
+
 const STEPS = { acido: acidSteps, base: baseSteps, sal: saltSteps };
 
 export function explain(c: Compound): string[] {
+  if (c.category === 'organico') return organicSteps(c);
   const lines = STEPS[c.category](c);
   // Fosfato is also ortofosfato, silicato also metassilicato.
   const others = c.names.slice(1).map((name) => `**${name}**`);

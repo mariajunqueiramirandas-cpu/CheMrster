@@ -3,16 +3,16 @@
  * the daily challenge. Nothing here counts toward the statistics.
  */
 import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { type Compound, TIER_LABEL, type Tier } from '../../../src/nomenclatura/catalog.ts';
 import { practicePick } from '../../../src/nomenclatura/daily.ts';
 import { check } from '../../../src/nomenclatura/check.ts';
 import { CATEGORY_LABEL, type Category } from '../../../src/nomenclatura/pieces.ts';
 import { Question } from '../game/Question.tsx';
-import { FONT, GUTTER, useTheme } from '../theme.ts';
+import { GUTTER, useTheme } from '../theme.ts';
 import { Segmented } from '../ui/controls.tsx';
 import { ArrowRightIcon } from '../ui/Icons.tsx';
-import { Btn, Press, Txt } from '../ui/kit.tsx';
+import { Btn, Txt } from '../ui/kit.tsx';
 import { TopBar } from '../ui/TopBar.tsx';
 
 type Kind = Category | 'todos';
@@ -21,6 +21,14 @@ type Level = 0 | Tier;
 
 const LEVELS: readonly Level[] = [0, 1, 2, 3];
 const levelLabel = (l: Level) => (l ? TIER_LABEL[l] : 'Todas');
+
+const KINDS: Array<{ id: Kind; label: string }> = [
+  { id: 'todos', label: 'Tudo' },
+  { id: 'acido', label: 'Ácidos' },
+  { id: 'base', label: 'Bases' },
+  { id: 'sal', label: 'Sais' },
+  { id: 'organico', label: 'Orgânicos' },
+];
 
 const seed = () => Math.floor(Math.random() * 2 ** 31);
 
@@ -55,41 +63,28 @@ export function PracticeScreen() {
     <View style={[styles.root, { backgroundColor: c.bench }]}>
       <TopBar subtitle={subtitle} />
       <View style={styles.filters}>
-        <View style={{ flex: 1 }}>
-          <Segmented<Kind>
-            label="Função"
-            small
-            value={kind}
-            onChange={(k) => {
-              setKind(k);
-              pick(k, level);
-            }}
-            options={[
-              { id: 'todos', label: 'Tudo' },
-              { id: 'acido', label: 'Ácidos' },
-              { id: 'base', label: 'Bases' },
-              { id: 'sal', label: 'Sais' },
-            ]}
-          />
-        </View>
-        <Press
-          sink={1}
-          onPress={() => {
-            const l = LEVELS[(LEVELS.indexOf(level) + 1) % LEVELS.length];
+        <Segmented<Kind>
+          label="Função"
+          small
+          fit
+          value={kind}
+          onChange={(k) => {
+            setKind(k);
+            pick(k, level);
+          }}
+          options={KINDS}
+        />
+        <Segmented<`${Level}`>
+          label="Dificuldade"
+          small
+          value={`${level}`}
+          onChange={(v) => {
+            const l = Number(v) as Level;
             setLevel(l);
             pick(kind, l);
           }}
-          accessibilityRole="button"
-          accessibilityLabel={`Dificuldade: ${levelLabel(level)}. Toque para trocar`}
-          style={[styles.level, { backgroundColor: c.benchDeep }]}
-        >
-          <View style={styles.dots}>
-            {[1, 2, 3].map((i) => (
-              <View key={i} style={[styles.dot, { backgroundColor: level === 0 ? c.muted : i <= level ? c.magenta : c.rule }]} />
-            ))}
-          </View>
-          <Text style={[styles.levelText, { color: c.text }]}>{levelLabel(level)}</Text>
-        </Press>
+          options={LEVELS.map((l) => ({ id: `${l}`, label: levelLabel(l) }))}
+        />
       </View>
       <Question
         key={compound.id + recent.length}
@@ -109,9 +104,5 @@ export function PracticeScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  filters: { flexDirection: 'row', gap: 6, paddingHorizontal: GUTTER, paddingBottom: 8, width: '100%', maxWidth: 600, alignSelf: 'center' },
-  level: { borderRadius: 14, paddingHorizontal: 10, alignItems: 'center', justifyContent: 'center', gap: 3, minWidth: 78 },
-  dots: { flexDirection: 'row', gap: 3 },
-  dot: { width: 7, height: 7, borderRadius: 4 },
-  levelText: { fontFamily: FONT.uiBold, fontSize: 13 },
+  filters: { gap: 6, paddingHorizontal: GUTTER, paddingBottom: 8, width: '100%', maxWidth: 600, alignSelf: 'center' },
 });

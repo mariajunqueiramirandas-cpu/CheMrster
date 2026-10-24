@@ -1,30 +1,38 @@
 # CheMrster: Nomenclatura do dia
 
-A daily challenge on IUPAC nomenclature for the ENEM. Every day everyone gets the same six
-compounds as formulas: two **acids**, two **bases** and two **salts**, easier first. You type each
-one's IUPAC name on the keyboard, one answer per compound:
+A daily challenge on IUPAC nomenclature for the ENEM. Every day everyone gets the same eight
+compounds: two **acids**, two **bases** and two **salts** as formulas, and two **organic
+compounds** drawn as the exam prints them (condensed, or skeletal for rings and long chains, with a
+button to switch), easier first. You type each one's IUPAC name on the keyboard, one answer per
+compound:
 
-| Formula | Answer |
+| Shown | Answer |
 | --- | --- |
 | HClO | ácido hipocloroso |
 | Fe(OH)₃ | hidróxido de ferro(III) |
 | NaHCO₃ | hidrogenocarbonato de sódio |
+| H₃C–CH(OH)–CH₃ | propan-2-ol |
+| H₃C–COO–CH₂–CH₃ | etanoato de etila |
 
-Typing is forgiving where it does not matter. Accents, capitals, hyphens and extra spaces are
-ignored, and the charge can be written ferro(III), ferro (III) or ferro III. Typing a
-traditional or popular name of the compound (sulfato férrico, soda cáustica) does not spend the
-answer: the app asks for the IUPAC name and you try again.
+Typing is forgiving where it does not matter. Accents, capitals, hyphens and spaces are ignored,
+the charge can be written ferro(III), ferro (III) or ferro III, and organic names can follow
+today's style or the older one still in many books (propan-2-ol or 2-propanol, buta-1,3-dieno or
+1,3-butadieno). Typing a traditional, popular or usual name of the compound (sulfato férrico,
+soda cáustica, acetona) does not spend the answer: the app asks for the IUPAC name and you try
+again.
 
-After each answer the app explains the name from the formula: the oxidation number and the
-hipo…oso / …ico / per…ico series, the charges that give the Roman numeral, the acid an anion comes
-from, and the other names in use. After the sixth, the day's summary shows the score, the streak
+After each answer the app explains the name: for inorganic compounds, from the formula (the
+oxidation number and the hipo…oso / …ico / per…ico series, the charges that give the Roman numeral,
+the acid an anion comes from); for organic ones, from the structure (the function and its suffix,
+the main chain's prefix, an/en/in, how to number, the branches in alphabetical order); and the
+other names in use. After the last one, the day's summary shows the score, the streak
 (consecutive days completed), every answer to review, and the countdown to the next challenge at
 local midnight.
 
 Around the challenge:
 
 - **Treino:** unlimited practice, by function and difficulty. It does not count in the statistics.
-- **Guia:** the naming rules and the tables of every ion in the app.
+- **Guia:** the naming rules (inorganic and organic) and the tables of every ion in the app.
 - **Estatísticas:** challenges completed, hit rate, streak and record, and hit rate by function.
 - **Ajustes:** the theme.
 
@@ -56,10 +64,11 @@ shared code by `npm test` at the repository root:
 | Path | What it does |
 | --- | --- |
 | `../src/nomenclatura/pieces.ts` | The parts of names (prefixes, element roots, suffixes, cations, Roman numerals) and how they spell a word (tio + sulfato = tiossulfato) |
-| `../src/nomenclatura/catalog.ts` | ~200 compounds with their IUPAC, traditional and everyday names, tiers and facts; base and salt formulas are built from their ions |
+| `../src/nomenclatura/catalog.ts` | ~300 compounds with their IUPAC, traditional and everyday names, tiers and facts; base and salt formulas are built from their ions |
+| `../src/nomenclatura/organic.ts` | The organic compounds (SMILES), and their names written from parts: branches, chain, an/en/in, suffix, locants, in today's and the older style |
 | `../src/nomenclatura/check.ts` | Checks a typed name: what is ignored, and the nudge for traditional and popular names |
 | `../src/nomenclatura/explain.ts` | Why each compound has its name, from its formula |
-| `../src/nomenclatura/daily.ts` | Challenge numbers by local date, the day's six compounds (no repeats until a pool runs out, never two days in a row), practice picks |
+| `../src/nomenclatura/daily.ts` | Challenge numbers by local date, the day's compounds (six until challenge #2, eight with the organic ones from #3; no repeats until a pool runs out, never two days in a row), practice picks |
 | `../src/nomenclatura/play.ts`, `store.ts` | Saved answers and statistics |
 
 The app holds the screens:
@@ -68,7 +77,7 @@ The app holds the screens:
 | --- | --- |
 | `app/` | Routes (Expo Router): the tabs *Hoje*, *Treino* and *Guia* |
 | `src/screens/` | The three screens; *Hoje* also holds the day's summary |
-| `src/game/` | The question (formula, typed answer, result and explanation), the sheets (how it works, statistics, preferences) and the midnight clock |
+| `src/game/` | The question (formula or structure, typed answer, result and explanation), the structure drawing (Nanquim, `../src/nanquim`, in react-native-svg), the sheets (how it works, statistics, preferences) and the midnight clock |
 | `src/ui/` | The UI kit: text, buttons, cards, sheets, icons, the top bar, toasts |
 | `src/prefs.ts`, `src/theme.ts` | The theme preference and the palette |
 | `metro.config.js` | Watches `../src` and resolves its packages from this folder, so there is one React |
@@ -76,8 +85,10 @@ The app holds the screens:
 
 ## Adding compounds
 
-Add a line to `ACID_DEFS`, `BASE_DEFS` or `SALT_DEFS` in `../src/nomenclatura/catalog.ts`. The tests
-check that each name spells right, that no two compounds share a name, and that every oxyacid's
-suffix matches the oxidation number of its formula. Days already played keep the compounds they
+Add a line to `ACID_DEFS`, `BASE_DEFS` or `SALT_DEFS` in `../src/nomenclatura/catalog.ts`, or to
+`ORGANIC_DEFS` in `../src/nomenclatura/organic.ts` (its SMILES and the parts of its name). The tests
+check that each name spells right, that no two compounds share a name, that every oxyacid's
+suffix matches the oxidation number of its formula, and that every organic name's parts (function,
+carbons, double and triple bonds) match its structure. Days already played keep the compounds they
 were played with. Changing a pool reshuffles the days that use it, so add compounds before launch
 or accept that future days change.

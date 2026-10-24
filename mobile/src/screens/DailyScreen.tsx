@@ -1,11 +1,12 @@
 /**
- * Today's challenge: two acids, two bases and two salts, named one at a time by typing. After
- * the last one, the day's summary: the score, the streak, every answer, and the countdown.
+ * Today's challenge: two acids, two bases, two salts and two organic compounds, named one at a
+ * time by typing. After the last one, the day's summary: the score, the streak, every answer, and
+ * the countdown.
  */
 import { router } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
-import { DAILY_SIZE, daily, puzzleDate } from '../../../src/nomenclatura/daily.ts';
+import { daily, puzzleDate } from '../../../src/nomenclatura/daily.ts';
 import { CATEGORY_LABEL } from '../../../src/nomenclatura/pieces.ts';
 import { type Question as Q, questionsOf, stats } from '../../../src/nomenclatura/play.ts';
 import { answerDaily, markHelpSeen, saveStore, useSave } from '../../../src/nomenclatura/store.ts';
@@ -13,6 +14,7 @@ import { useCountdown, useToday } from '../game/clock.ts';
 import { Formula } from '../game/Formula.tsx';
 import { Question } from '../game/Question.tsx';
 import { openSheet } from '../game/Sheets.tsx';
+import { Structure } from '../game/Structure.tsx';
 import { COLUMN, FONT, GUTTER, useTheme } from '../theme.ts';
 import { ArrowRightIcon, ChartIcon, CheckIcon, ChevronRightIcon, CrossIcon, FlameIcon } from '../ui/Icons.tsx';
 import { Btn, Card, Press, Txt } from '../ui/kit.tsx';
@@ -27,9 +29,12 @@ const dateLabel = (n: number) =>
 function Progress({ questions, index, onOpen }: { questions: Q[]; index: number; onOpen: (i: number) => void }) {
   const c = useTheme();
   const done = questions.filter((q) => q.answer).length;
+  // Eight dots and the count fit a 320 px phone only a little smaller.
+  const many = questions.length > 6;
+  const mark = many ? 12 : 14;
   return (
     <View style={styles.progress}>
-      <View style={styles.dots}>
+      <View style={[styles.dots, many && { gap: 4 }]}>
         {questions.map((q, i) => {
           const a = q.answer;
           const here = i === index;
@@ -43,16 +48,17 @@ function Progress({ questions, index, onOpen }: { questions: Q[]; index: number;
               accessibilityLabel={`Composto ${i + 1}: ${a ? (a.correct ? 'certo' : 'errado') : 'a responder'}`}
               style={[
                 styles.dot,
+                many && styles.dotSmall,
                 { borderColor: here ? c.magenta : a ? 'transparent' : c.rule, backgroundColor: a ? (a.correct ? c.right : c.wrong) : 'transparent' },
               ]}
             >
-              {a ? a.correct ? <CheckIcon color="#fff" width={14} height={14} strokeWidth={3} /> : <CrossIcon color="#fff" width={14} height={14} strokeWidth={3} /> : null}
+              {a ? a.correct ? <CheckIcon color="#fff" width={mark} height={mark} strokeWidth={3} /> : <CrossIcon color="#fff" width={mark} height={mark} strokeWidth={3} /> : null}
             </Press>
           );
         })}
       </View>
       <Text style={[styles.count, { color: c.muted }]}>
-        {done} de {DAILY_SIZE}
+        {done} de {questions.length}
       </Text>
     </View>
   );
@@ -64,6 +70,7 @@ function Summary({ n, questions, onOpen }: { n: number; questions: Q[]; onOpen: 
   const countdown = useCountdown();
   const streak = useMemo(() => stats(save.days, n).streak, [save.days, n]);
   const right = questions.filter((q) => q.answer?.correct).length;
+  const size = questions.length;
   return (
     <ScrollView contentContainerStyle={styles.summary}>
       <Card style={styles.score}>
@@ -71,10 +78,10 @@ function Summary({ n, questions, onOpen }: { n: number; questions: Q[]; onOpen: 
           Desafio #{n} completo
         </Txt>
         <Text style={[styles.scoreValue, { color: c.text }]}>
-          {right}/{DAILY_SIZE}
+          {right}/{size}
         </Text>
         <Txt tone="muted" style={{ textAlign: 'center' }}>
-          {right === DAILY_SIZE ? 'Todos os nomes certos!' : 'Toque num composto para rever o porquê do nome.'}
+          {right === size ? 'Todos os nomes certos!' : 'Toque num composto para rever o porquê do nome.'}
         </Txt>
         <View style={styles.streak}>
           <FlameIcon color={c.magenta} />
@@ -98,7 +105,13 @@ function Summary({ n, questions, onOpen }: { n: number; questions: Q[]; onOpen: 
             style={[styles.row, { backgroundColor: c.surface, borderColor: c.rule }]}
           >
             {a.correct ? <CheckIcon color={c.right} /> : <CrossIcon color={c.wrong} />}
-            <Formula formula={q.compound.formula} size={20} style={styles.rowFormula} />
+            {q.compound.smiles ? (
+              <View style={[styles.rowFormula, styles.rowPaper, { backgroundColor: c.paper }]}>
+                <Structure smiles={q.compound.smiles} kind="skeletal" size={22} maxWidth={68} maxHeight={40} title={q.compound.formula} />
+              </View>
+            ) : (
+              <Formula formula={q.compound.formula} size={20} style={styles.rowFormula} />
+            )}
             <View style={{ flex: 1 }}>
               <Txt variant="strong">{q.compound.name}</Txt>
               {!a.correct && (
@@ -127,7 +140,8 @@ export function DailyScreen() {
   const day = save.days[n];
   const questions = useMemo(() => questionsOf(n, day, today), [n, day, today]);
   const answered = day?.length ?? 0;
-  // The question on screen; DAILY_SIZE is the summary.
+  const size = today.length;
+  // The question on screen; `size` is the summary.
   const [index, setIndex] = useState(answered);
 
   // A new day starts at its first open question.
@@ -147,10 +161,10 @@ export function DailyScreen() {
   }, []);
 
   const q = questions[index];
-  const finished = answered >= DAILY_SIZE;
+  const finished = answered >= size;
   // After the answer on screen: on to the next open question, back to it, or to the summary.
   const onward = finished
-    ? { label: 'Ver resultado do dia', to: DAILY_SIZE }
+    ? { label: 'Ver resultado do dia', to: size }
     : index < answered - 1
       ? { label: 'Voltar ao desafio', to: answered }
       : { label: 'Próximo composto', to: answered };
@@ -163,7 +177,7 @@ export function DailyScreen() {
         <Question
           key={`${n}:${index}`}
           compound={q.compound}
-          kicker={`${CATEGORY_LABEL[q.compound.category]} · ${index + 1} de ${DAILY_SIZE}`}
+          kicker={`${CATEGORY_LABEL[q.compound.category]} · ${index + 1} de ${size}`}
           answer={q.answer}
           onSubmit={(typed) => {
             markHelpSeen();
@@ -184,6 +198,7 @@ const styles = StyleSheet.create({
   progress: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: GUTTER, paddingBottom: 10, width: '100%', maxWidth: COLUMN, alignSelf: 'center' },
   dots: { flex: 1, flexDirection: 'row', gap: 6 },
   dot: { width: 26, height: 26, borderRadius: 13, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
+  dotSmall: { width: 22, height: 22, borderRadius: 11 },
   count: { fontFamily: FONT.uiBold, fontSize: 14 },
   summary: { paddingHorizontal: GUTTER, paddingTop: 4, paddingBottom: 32, gap: 10, width: '100%', maxWidth: COLUMN, alignSelf: 'center' },
   score: { gap: 6, alignItems: 'center' },
@@ -191,5 +206,7 @@ const styles = StyleSheet.create({
   streak: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 2, borderRadius: 12, paddingVertical: 10, paddingHorizontal: 12 },
   rowFormula: { minWidth: 76 },
+  // Molecules stay black ink on paper, as printed, in the dark theme too.
+  rowPaper: { borderRadius: 6, padding: 4, alignItems: 'center', justifyContent: 'center' },
   actions: { flexDirection: 'row', gap: 8, marginTop: 6 },
 });

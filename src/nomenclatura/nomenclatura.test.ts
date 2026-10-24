@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
+import { type FunctionId, functionSet } from '../chem/analysis.ts';
+import { moleculeFromSmiles } from '../nanquim/index.ts';
 import { ANIONS, COMPOUNDS, compoundById, ofCategory, parentAcid } from './catalog.ts';
 import { check, normalize } from './check.ts';
-import { DAILY_SIZE, daily, msToNext, practicePick, puzzleDate, puzzleNumber } from './daily.ts';
+import { DAILY_SIZE, daily, dailySize, msToNext, practicePick, puzzleDate, puzzleNumber } from './daily.ts';
 import { explain } from './explain.ts';
 import { counts, ionText, pretty, runs } from './formula.ts';
+import { type OrgFunction, partCarbons } from './organic.ts';
 import { CATEGORIES, word } from './pieces.ts';
 import { type DayPlay, type Days, questionsOf, stats } from './play.ts';
 import { answerDaily, revive, saveStore } from './store.ts';
@@ -135,6 +138,88 @@ describe('catalog', () => {
   });
 });
 
+describe('organic names', () => {
+  it.each([
+    ['C', 'metano'],
+    ['CC(C)O', 'propan-2-ol'],
+    ['CC(C)=O', 'propanona'],
+    ['CC(C)C', 'metilpropano'],
+    ['CC(C)(C)C', '2,2-dimetilpropano'],
+    ['CCCC(CC)C(C)C', '3-etil-2-metil-hexano'],
+    ['C=CC=C', 'buta-1,3-dieno'],
+    ['C=CC(C)=C', '2-metilbuta-1,3-dieno'],
+    ['C=CCO', 'prop-2-en-1-ol'],
+    ['OCCO', 'etano-1,2-diol'],
+    ['OCC(O)CO', 'propano-1,2,3-triol'],
+    ['C1CCCCC1', 'ciclo-hexano'],
+    ['Cc1ccccc1', 'metilbenzeno'],
+    ['CC(=O)O', 'ácido etanoico'],
+    ['OC(=O)C(=O)O', 'ácido etanodioico'],
+    ['CC(O)C(=O)O', 'ácido 2-hidroxipropanoico'],
+    ['CCOC(C)=O', 'etanoato de etila'],
+    ['CC(C)CCOC(C)=O', 'etanoato de 3-metilbutila'],
+    ['CCOCC', 'etoxietano'],
+    ['CN(C)C', 'N,N-dimetilmetanamina'],
+    ['CC#N', 'etanonitrila'],
+    ['ClC(Cl)Cl', 'triclorometano'],
+    ['FC(F)(Cl)Cl', 'diclorodifluorometano'],
+  ])('%s is %s', (smiles, name) => {
+    expect(byId(smiles).name).toBe(name);
+  });
+
+  it('accepts the older style and the locants a name may leave out', () => {
+    expect(byId('CC(C)O').names).toEqual(['propan-2-ol', '2-propanol']);
+    expect(byId('C=CC=C').names).toEqual(['buta-1,3-dieno', '1,3-butadieno']);
+    expect(byId('CC(C)=O').names).toEqual(['propanona', 'propan-2-ona', '2-propanona']);
+    expect(byId('CC(C)C').names).toEqual(['metilpropano', '2-metilpropano']);
+    // Nobody writes 1-eteno or 1-metilbenzeno.
+    expect(byId('C=C').names).toEqual(['eteno']);
+    expect(byId('Cc1ccccc1').names).toEqual(['metilbenzeno']);
+    expect(byId('CN').names).toEqual(['metanamina', 'metilamina']);
+  });
+
+  it('gives the molecular formula', () => {
+    expect(byId('CCO').formula).toBe('C2H6O');
+    expect(byId('FC(F)(Cl)Cl').formula).toBe('CCl2F2');
+    expect(byId('[O-][N+](=O)c1ccccc1').formula).toBe('C6H5NO2');
+  });
+
+  it('builds every name from parts that match the structure', () => {
+    const groups: Record<OrgFunction, FunctionId | undefined> = {
+      hidrocarboneto: undefined,
+      alcool: 'álcool',
+      fenol: 'fenol',
+      aldeido: 'aldeído',
+      cetona: 'cetona',
+      acido: 'ácido carboxílico',
+      ester: 'éster',
+      eter: 'éter',
+      amina: 'amina',
+      amida: 'amida',
+      haleto: 'haleto orgânico',
+      nitrila: 'nitrila',
+      nitro: 'nitrocomposto',
+    };
+    for (const c of ofCategory('organico')) {
+      const def = c.organic!;
+      const mol = moleculeFromSmiles(def.smiles);
+      const found = functionSet(mol);
+      const fn = groups[def.fn];
+      if (fn) expect(found, c.name).toContain(fn);
+      else expect(found, c.name).toEqual([]);
+      const p = def.parts;
+      if (!p) continue;
+      expect(partCarbons(p), c.name).toBe(mol.atoms.filter((a) => a.element === 'C').length);
+      const cc = (order: number) =>
+        mol.bonds.filter((b) => b.order === order && !b.aromatic && mol.atoms[b.a].element === 'C' && mol.atoms[b.b].element === 'C').length;
+      // Etenil (CH₂=CH–) brings its own double bond.
+      const vinyl = (p.subs ?? []).filter((x) => x.group === 'etenil').length;
+      expect(cc(2), c.name).toBe((p.en?.length ?? 0) + vinyl);
+      expect(cc(3), c.name).toBe(p.in?.length ?? 0);
+    }
+  });
+});
+
 describe('formulas', () => {
   it('typesets counts and charges', () => {
     expect(pretty('Fe2(SO4)3')).toBe('Fe₂(SO₄)₃');
@@ -169,7 +254,28 @@ describe('checking typed names', () => {
     expect(check(byId('H2SO4'), 'sulfúrico').kind).toBe('wrong');
   });
 
+  it('ignores how locants are separated, and the h of hexano after a prefix', () => {
+    for (const typed of ['propan-2-ol', 'Propan 2 ol', '2-propanol', '2 propanol']) expect(check(byId('CC(C)O'), typed).kind, typed).toBe('right');
+    for (const typed of ['2,2-dimetilpropano', '2, 2-dimetil-propano', '2 2 dimetilpropano']) {
+      expect(check(byId('CC(C)(C)C'), typed).kind, typed).toBe('right');
+    }
+    expect(check(byId('C1CCCCC1'), 'cicloexano').kind).toBe('right');
+    expect(check(byId('C1CCCCC1'), 'ciclohexano').kind).toBe('right');
+    expect(check(byId('CCCC(CC)C(C)C'), '3-etil-2-metilexano').kind).toBe('right');
+    expect(check(byId('CN(C)C'), 'n,n-dimetilmetanamina').kind).toBe('right');
+  });
+
+  it('marks the wrong locant or chain wrong', () => {
+    expect(check(byId('CC(C)O'), 'propan-1-ol').kind).toBe('wrong');
+    expect(check(byId('CC(C)O'), 'propanol').kind).toBe('wrong');
+    expect(check(byId('CC(C)(C)C'), '22-dimetilpropano').kind).toBe('wrong');
+    expect(check(byId('CC(C)(C)C'), 'dimetilpropano').kind).toBe('wrong');
+    expect(check(byId('C=CC=C'), 'butadieno').kind).toBe('other');
+  });
+
   it('asks again for the IUPAC name when given another name of the compound', () => {
+    expect(check(byId('CC(C)=O'), 'Acetona')).toMatchObject({ kind: 'other', note: expect.stringContaining('usual') });
+    expect(check(byId('CC(=O)O'), 'ácido acético')).toMatchObject({ kind: 'other' });
     expect(check(byId('Fe2(SO4)3'), 'sulfato férrico')).toMatchObject({ kind: 'other', note: expect.stringContaining('tradicional') });
     expect(check(byId('NaHCO3'), 'Bicarbonato de sodio')).toMatchObject({ kind: 'other' });
     expect(check(byId('NaOH'), 'soda cáustica')).toMatchObject({ kind: 'other', note: expect.stringContaining('popular') });
@@ -188,14 +294,23 @@ describe('daily', () => {
     expect(msToNext(new Date(2026, 9, 23, 23, 59, 0))).toBe(60_000);
   });
 
-  it('gives everyone the same two acids, two bases and two salts, easier first', () => {
+  it('gives everyone the same two of each kind, easier first, organic compounds from challenge #3', () => {
     expect(daily(10).map((c) => c.id)).toEqual(daily(10).map((c) => c.id));
     for (let n = 1; n <= 60; n++) {
       const day = daily(n);
-      expect(day.map((c) => c.category)).toEqual(['acido', 'acido', 'base', 'base', 'sal', 'sal']);
-      expect(new Set(day.map((c) => c.id)).size).toBe(DAILY_SIZE);
-      for (let i = 0; i < DAILY_SIZE; i += 2) expect(day[i].tier).toBeLessThanOrEqual(day[i + 1].tier);
+      const kinds = ['acido', 'acido', 'base', 'base', 'sal', 'sal', ...(n >= 3 ? ['organico', 'organico'] : [])];
+      expect(day.map((c) => c.category)).toEqual(kinds);
+      expect(day.length).toBe(dailySize(n));
+      expect(new Set(day.map((c) => c.id)).size).toBe(day.length);
+      for (let i = 0; i < day.length; i += 2) expect(day[i].tier).toBeLessThanOrEqual(day[i + 1].tier);
     }
+    expect(dailySize(2)).toBe(6);
+    expect(dailySize(3)).toBe(DAILY_SIZE);
+  });
+
+  it('keeps the days before the organic compounds as they were played', () => {
+    expect(daily(1).map((c) => c.id)).toEqual(['HNO3', 'HIO4', 'Cu(OH)2', 'Pb(OH)4', 'CaCl2', 'Pb(NO3)2']);
+    expect(daily(2).map((c) => c.id)).toEqual(['HClO4', 'H3PO2', 'Ni(OH)2', 'Sn(OH)4', 'SrCO3', 'Ni(NO3)2']);
   });
 
   it('does not repeat a compound until its pool runs out, nor on the next day', () => {
@@ -230,8 +345,8 @@ describe('play', () => {
     expect(s.streak).toBe(2);
     expect(s.best).toBe(3);
     expect(s.played).toBe(5);
-    expect(s.answered).toBe(30);
-    expect(s.correct).toBe(28);
+    expect(s.answered).toBe(40);
+    expect(s.correct).toBe(38);
     expect(s.byCategory.acido).toEqual({ answered: 10, correct: 8 });
     // Today still open: yesterday's streak stands; finishing today extends it.
     expect(stats({ ...days, 10: played(10).slice(0, 3) }, 10).streak).toBe(2);

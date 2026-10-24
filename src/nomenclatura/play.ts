@@ -1,6 +1,6 @@
 /** A player's days: what was typed for each compound, and the statistics. */
 import { type Compound, compoundById } from './catalog.ts';
-import { DAILY_SIZE, daily } from './daily.ts';
+import { daily, dailySize } from './daily.ts';
 import { CATEGORIES, type Category } from './pieces.ts';
 
 export interface Answer {
@@ -30,7 +30,8 @@ export function questionsOf(n: number, day: DayPlay | undefined, today: Compound
   });
 }
 
-export const isComplete = (day: DayPlay | undefined) => (day?.length ?? 0) >= DAILY_SIZE;
+/** Whether challenge `n` has every compound answered. */
+export const isComplete = (day: DayPlay | undefined, n: number) => (day?.length ?? 0) >= dailySize(n);
 
 export interface Stats {
   /** Days with at least one answer. */
@@ -59,7 +60,7 @@ export function stats(days: Days, today: number): Stats {
   for (const [key, day] of Object.entries(days)) {
     if (!day.length) continue;
     s.played++;
-    if (isComplete(day)) complete.add(Number(key));
+    if (isComplete(day, Number(key))) complete.add(Number(key));
     for (const a of day) {
       const category = compoundById(a.id)?.category;
       s.answered++;
